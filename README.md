@@ -45,3 +45,37 @@ Su objetivo es mejorar la calidad de vida de los usuarios al proporcionar record
 
 ## 🏗️ Arquitectura General
 
+---
+
+## 📅 Cronograma (4 meses)
+
+| Fase | Entregables |
+|------|-------------|
+| **Mes 1** | Kick-off, backlog, arquitectura, diagrama |
+| **Mes 2** | Prototipo frontend, backend mínimo, integración DB |
+| **Mes 3** | Entrenamiento LLM, notificaciones WhatsApp |
+| **Mes 4** | Pruebas, despliegue, acta de cierre |
+
+---
+
+## ✅ Criterios de Aceptación
+
+- >90% de funcionalidades probadas exitosamente.  
+- ≤10% tolerancia de defectos críticos en pruebas.  
+
+---
+
+## 📂 Evidencias del Proyecto
+
+- 📌 Kick-off  
+- 🏛️ Definición de arquitectura  
+- 🖼️ Diagramas de arquitectura  
+- ⚠️ Matriz de riesgos  
+- 📋 Product backlog  
+- 🎨 Prototipo  
+- 💻 Código fuente  
+- 🧪 BDD (Behavior Driven Development)  
+- 📑 Acta de cierre  
+
+---
+
