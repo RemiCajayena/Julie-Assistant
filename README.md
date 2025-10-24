@@ -1,81 +1,50 @@
-# 🌸 Julie – Asistente Virtual para Adultos Mayores
+# Welcome to your Expo app 👋
 
-![Status](https://img.shields.io/badge/Status-En%20Desarrollo-yellow?style=flat-square)  
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)  
-![Platform](https://img.shields.io/badge/Platform-Mobile%20App-blue?style=flat-square)
+This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
----
+## Get started
 
-## 📖 Descripción
+1. Install dependencies
 
-**Julie** es un asistente virtual diseñado para **apoyar a adultos mayores** en sus tareas cotidianas mediante **interacciones naturales en lenguaje humano**.  
-Su objetivo es mejorar la calidad de vida de los usuarios al proporcionar recordatorios, listas, noticias, clima, música y comunicación directa con tutores o cuidadores vía **WhatsApp**.
+   ```bash
+   npm install
+   ```
 
----
+2. Start the app
 
-## 🚀 Características principales
+   ```bash
+   npx expo start
+   ```
 
-- 🎙️ **Activación por voz** con botón de micrófono.  
-- ⏰ **Gestión de recordatorios y listas** fáciles de usar.  
-- 🎶 **Reproducción de música** y entretenimiento.  
-- 🌦️ **Clima y noticias** actualizadas.  
-- 📲 **Notificaciones automáticas a tutores/cuidadores** vía WhatsApp.  
-- 🧑‍🤝‍🧑 **Personalización del nombre** del asistente (no siempre debe ser “Julie”).  
+In the output, you'll find options to open the app in a
 
----
+- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
+- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
+- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
 
-## 🛠️ Tecnologías utilizadas
+You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
-- 📱 **Frontend móvil**: [React Native](https://reactnative.dev/) + [Expo](https://expo.dev/)  
-  ![React Native](https://img.shields.io/badge/React_Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
-  ![Expo](https://img.shields.io/badge/Expo-000000?style=for-the-badge&logo=expo&logoColor=white)
+## Get a fresh project
 
-- 🌐 **Backend**: [Node.js](https://nodejs.org/) + [Express](https://expressjs.com/)  
-  ![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)
-  ![Express](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)
+When you're ready, run:
 
-- 🤖 **IA y NLP**:  
-  - LLM personalizado (fine-tuning)  
-  - [pgvector](https://github.com/pgvector/pgvector) para búsqueda semántica  
-  ![PostgreSQL](https://img.shields.io/badge/Postgres-336791?style=for-the-badge&logo=postgresql&logoColor=white)
+```bash
+npm run reset-project
+```
 
-- 💬 **Mensajería**: API de [WhatsApp Business](https://www.whatsapp.com/business/)  
+This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
----
+## Learn more
 
-## 🏗️ Arquitectura General
+To learn more about developing your project with Expo, look at the following resources:
 
----
+- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
+- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
 
-## 📅 Cronograma (4 meses)
+## Join the community
 
-| Fase | Entregables |
-|------|-------------|
-| **Mes 1** | Kick-off, backlog, arquitectura, diagrama |
-| **Mes 2** | Prototipo frontend, backend mínimo, integración DB |
-| **Mes 3** | Entrenamiento LLM, notificaciones WhatsApp |
-| **Mes 4** | Pruebas, despliegue, acta de cierre |
+Join our community of developers creating universal apps.
 
----
-
-## ✅ Criterios de Aceptación
-
-- >90% de funcionalidades probadas exitosamente.  
-- ≤10% tolerancia de defectos críticos en pruebas.  
-
----
-
-## 📂 Evidencias del Proyecto
-
-- 📌 Kick-off  
-- 🏛️ Definición de arquitectura  
-- 🖼️ Diagramas de arquitectura  
-- ⚠️ Matriz de riesgos  
-- 📋 Product backlog  
-- 🎨 Prototipo  
-- 💻 Código fuente  
-- 🧪 BDD (Behavior Driven Development)  
-- 📑 Acta de cierre  
-
----
-
+- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
+- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.

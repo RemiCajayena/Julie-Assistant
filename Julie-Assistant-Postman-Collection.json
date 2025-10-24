@@ -1,0 +1,345 @@
+{
+  "info": {
+    "name": "Julie Assistant API",
+    "description": "Colección completa de endpoints para el sistema de medicamentos y recordatorios",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://192.168.1.207:3000",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "usuario123",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Connectivity",
+      "item": [
+        {
+          "name": "Ping - Test Conectividad",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ping",
+              "host": ["{{baseUrl}}"],
+              "path": ["ping"]
+            },
+            "description": "Test básico de conectividad del servidor"
+          }
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Verificar estado del servidor"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tutor Management",
+      "item": [
+        {
+          "name": "Registrar Tutor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"name\": \"María García\",\n  \"phone\": \"+56912345678\",\n  \"relationship\": \"Hija\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tutor",
+              "host": ["{{baseUrl}}"],
+              "path": ["tutor"]
+            },
+            "description": "Registrar o actualizar información del tutor/cuidador"
+          }
+        },
+        {
+          "name": "Obtener Tutor",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tutor/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tutor", "{{userId}}"]
+            },
+            "description": "Obtener información del tutor registrado"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Medications",
+      "item": [
+        {
+          "name": "Crear Medicamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"name\": \"Aspirina\",\n  \"dosage\": \"500mg\",\n  \"frequency\": \"Cada 8 horas\",\n  \"schedule\": \"08:00, 16:00, 22:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/medications",
+              "host": ["{{baseUrl}}"],
+              "path": ["medications"]
+            },
+            "description": "Crear un nuevo medicamento con horarios programados"
+          }
+        },
+        {
+          "name": "Crear Medicamento - Ejemplo 2 (Metformina)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"name\": \"Metformina\",\n  \"dosage\": \"850mg\",\n  \"frequency\": \"Cada 12 horas\",\n  \"schedule\": \"09:00, 21:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/medications",
+              "host": ["{{baseUrl}}"],
+              "path": ["medications"]
+            },
+            "description": "Ejemplo: Medicamento para diabetes"
+          }
+        },
+        {
+          "name": "Crear Medicamento - Ejemplo 3 (Losartán)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"name\": \"Losartán\",\n  \"dosage\": \"50mg\",\n  \"frequency\": \"Una vez al día\",\n  \"schedule\": \"07:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/medications",
+              "host": ["{{baseUrl}}"],
+              "path": ["medications"]
+            },
+            "description": "Ejemplo: Medicamento para presión arterial"
+          }
+        },
+        {
+          "name": "Obtener Medicamentos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/medications/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["medications", "{{userId}}"]
+            },
+            "description": "Obtener todos los medicamentos activos del usuario"
+          }
+        },
+        {
+          "name": "Desactivar Medicamento",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/medications/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["medications", "1"]
+            },
+            "description": "Desactivar un medicamento (cambiar el ID según necesites)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Medication Logs",
+      "item": [
+        {
+          "name": "Registrar Medicamento Tomado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"medicationId\": 1,\n  \"status\": \"taken\",\n  \"notes\": \"Tomado correctamente después del desayuno\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/medication-taken",
+              "host": ["{{baseUrl}}"],
+              "path": ["medication-taken"]
+            },
+            "description": "Registrar que el usuario tomó su medicamento"
+          }
+        },
+        {
+          "name": "Registrar Medicamento Olvidado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"medicationId\": 1,\n  \"status\": \"missed\",\n  \"notes\": \"Usuario olvidó tomar el medicamento\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/medication-taken",
+              "host": ["{{baseUrl}}"],
+              "path": ["medication-taken"]
+            },
+            "description": "Registrar que el usuario olvidó su medicamento"
+          }
+        },
+        {
+          "name": "Obtener Estado de Medicamentos Hoy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/medications/{{userId}}/today",
+              "host": ["{{baseUrl}}"],
+              "path": ["medications", "{{userId}}", "today"]
+            },
+            "description": "Ver el estado de los medicamentos de hoy"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reminders",
+      "item": [
+        {
+          "name": "Obtener Próximos Recordatorios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/reminders/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["reminders", "{{userId}}"]
+            },
+            "description": "Ver los próximos medicamentos a tomar con tiempo restante"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alerts",
+      "item": [
+        {
+          "name": "Obtener Alertas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/alerts/{{userId}}?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["alerts", "{{userId}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Número de alertas a obtener"
+                }
+              ]
+            },
+            "description": "Obtener historial de alertas enviadas"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Services",
+      "item": [
+        {
+          "name": "Transcribir Audio",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": "",
+                  "description": "Archivo de audio a transcribir"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transcribe",
+              "host": ["{{baseUrl}}"],
+              "path": ["transcribe"]
+            },
+            "description": "Transcribir audio a texto usando Whisper"
+          }
+        },
+        {
+          "name": "Text-to-Speech",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hola, es hora de tomar tu medicamento\",\n  \"voice\": \"es-US-Neural2-A\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tts",
+              "host": ["{{baseUrl}}"],
+              "path": ["tts"]
+            },
+            "description": "Convertir texto a voz usando Google Cloud TTS"
+          }
+        }
+      ]
+    }
+  ]
+}
