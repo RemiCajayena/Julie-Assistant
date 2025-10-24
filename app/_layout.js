@@ -1,10 +1,25 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Slot, Tabs } from "expo-router";
 import { View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MicButton } from '../components/MicButton';
+import { NotificationProvider } from '../components/NotificationProvider';
+import { AuthProvider } from '../contexts/AuthContext';
+import { ModeProvider } from '../contexts/ModeContext';
 
 export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <ModeProvider>
+        <NotificationProvider>
+          <Slot />
+        </NotificationProvider>
+      </ModeProvider>
+    </AuthProvider>
+  );
+}
+
+export function TabsLayout() {
   const insets = useSafeAreaInsets();
   
   // Función para manejar la transcripción del micrófono

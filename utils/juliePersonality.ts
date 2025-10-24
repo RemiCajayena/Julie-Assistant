@@ -65,8 +65,6 @@ export const detectUserInfo = (message: string): {
     intent: 'general'
   };
 
-  console.log('🔍 Analizando mensaje:', message);
-
   // Detectar presentaciones
   const introPatterns = [
     /me llamo ([A-Za-záéíóúñ]+)/i,
@@ -80,8 +78,6 @@ export const detectUserInfo = (message: string): {
     if (match) {
       result.name = match[1];
       result.intent = 'introduction';
-      console.log('✅ Nombre detectado:', result.name);
-      console.log('✅ Intent detectado:', result.intent);
       break;
     }
   }
@@ -107,7 +103,6 @@ export const detectUserInfo = (message: string): {
     result.intent = 'question';
   }
 
-  console.log('📊 Resultado final:', result);
   return result;
 };
 
@@ -117,62 +112,43 @@ export const generateContextualResponse = (
   conversation: any
 ): string | null => {
   
-  console.log('=== GENERANDO RESPUESTA CONTEXTUAL ===');
-  console.log('userMessage:', userMessage);
-  console.log('userInfo:', userInfo);
-  console.log('intent:', userInfo.intent);
-  console.log('name:', userInfo.name);
-  
   // Respuestas específicas para presentaciones
   if (userInfo.intent === 'introduction' && userInfo.name) {
-    console.log('✅ DETECTADA PRESENTACIÓN - GENERANDO SALUDO');
     const greetings = [
       `¡Hola ${userInfo.name}! ¡Qué gusto conocerte! Soy Julie, tu asistente virtual. ¿Cómo has estado?`,
       `¡Encantada de conocerte, ${userInfo.name}! Me llamo Julie. ¿En qué puedo ayudarte hoy?`,
       `¡Hola ${userInfo.name}! Soy Julie, y estoy muy feliz de conocerte. ¿Qué tal tu día?`,
       `¡Perfecto, ${userInfo.name}! Ya te tengo en mi memoria. Soy Julie, ¿qué te trae por aquí?`
     ];
-    const selectedGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-    console.log('🎯 Respuesta seleccionada:', selectedGreeting);
-    return selectedGreeting;
+    return greetings[Math.floor(Math.random() * greetings.length)];
   }
-
-  console.log('❌ No es presentación, continuando...');
   
   // Respuestas para preferencias
   if (userInfo.intent === 'preference' && userInfo.preferences.length > 0) {
     const pref = userInfo.preferences[0];
-    console.log('✅ DETECTADA PREFERENCIA:', pref);
     return `¡Qué genial que te guste ${pref}! A mí también me parece interesante. ¿Qué es lo que más disfrutas de eso?`;
   }
 
   // Si ya conocemos el nombre, usarlo ocasionalmente
   if (conversation?.context?.userName && Math.random() > 0.7) {
-    console.log('📝 Usuario conocido, dejando que ChatGPT responda con contexto');
     return null; // Dejar que ChatGPT responda pero con el contexto del nombre
   }
 
-  console.log('🔄 Sin respuesta contextual específica');
   return null; // Usar ChatGPT
 };
 
 export const generateIntelligentFallback = (text: string, userInfo: any, conversation: any): string => {
-  console.log('🆘 Generando fallback inteligente');
-  
   // Si es presentación
   if (userInfo.intent === 'introduction' && userInfo.name) {
-    console.log('🆘 Fallback para presentación');
     return `¡Hola ${userInfo.name}! Encantada de conocerte. Soy Julie, ¿cómo estás hoy?`;
   }
   
   // Si ya conocemos el nombre
   if (conversation?.context?.userName) {
-    console.log('🆘 Fallback con nombre conocido');
     return `Interesante, ${conversation.context.userName}. Cuéntame más sobre "${text}".`;
   }
   
   // Respuesta general
-  console.log('🆘 Fallback general');
   const responses = [
     `Me parece muy interesante lo que mencionas sobre "${text}". ¿Qué opinas tú?`,
     `"${text}"... ¡qué tema tan fascinante! ¿Podrías contarme más?`,

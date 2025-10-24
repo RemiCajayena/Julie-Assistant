@@ -51,3 +51,32 @@ export const Fonts = Platform.select({
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+// Theme para componentes personalizados
+export const theme = {
+  colors: {
+    primary: '#6366f1',
+    secondary: '#8b5cf6',
+    success: '#10b981',
+    warning: '#f59e0b',
+    danger: '#ef4444',
+    text: '#1f2937',
+    textLight: '#6b7280',
+    background: '#ffffff',
+    backgroundLight: '#f9fafb',
+    border: '#e5e7eb',
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+  },
+  borderRadius: {
+    sm: 4,
+    md: 8,
+    lg: 12,
+    xl: 16,
+  },
+};

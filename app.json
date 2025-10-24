@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "julie-assistant",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -19,7 +19,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.julieassistant",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Julie necesita acceso al micrófono para escucharte."
+        "NSMicrophoneUsageDescription": "Julie necesita acceso al micrófono para escucharte.",
+        "NSUserNotificationsUsageDescription": "Julie necesita enviar notificaciones para recordarte tomar tus medicamentos."
       }
     },
     "android": {
@@ -29,17 +30,33 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
-      "./plugins/withAndroidManifestFix.js"
+      "./plugins/withAndroidManifestFix.js",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#6366f1",
+          "sounds": [
+            "./assets/sounds/notification.wav"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
