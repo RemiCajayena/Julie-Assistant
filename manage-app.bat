@@ -71,25 +71,46 @@ GOTO MENU
 :CLEAR
 echo.
 echo ========================================
-echo   LIMPIANDO DATOS DE LA APP
+echo   RESET COMPLETO DEL SISTEMA
 echo ========================================
 echo.
-REM Truncar base de datos antes de limpiar datos
+echo ATENCION: Esto eliminara:
+echo   - Base de datos del servidor (medicamentos, recordatorios, tokens)
+echo   - Datos de la app en el dispositivo (PIN, configuracion)
+echo.
+echo Presiona Ctrl+C para cancelar o cualquier tecla para continuar...
+pause > nul
+echo.
+
+REM Paso 1: Limpiar base de datos del servidor
+echo [1/2] Limpiando base de datos del servidor...
 call truncate-db.bat
+
+REM Paso 2: Limpiar datos de la app en el dispositivo
+echo [2/2] Limpiando datos de la app en el dispositivo...
 IF DEFINED DEVICE_ID (
     %ADB_PATH% -s %DEVICE_ID% shell pm clear %PACKAGE_NAME%
 ) ELSE (
     %ADB_PATH% shell pm clear %PACKAGE_NAME%
 )
+
 IF %ERRORLEVEL% EQU 0 (
     echo.
-    echo [OK] Datos limpiados exitosamente!
+    echo ========================================
+    echo [OK] RESET COMPLETO EXITOSO!
+    echo ========================================
+    echo.
+    echo Sistema completamente reiniciado:
+    echo   [x] Base de datos limpia
+    echo   [x] Datos de la app eliminados
     echo.
     echo La app volvera al setup inicial (PIN setup)
+    echo El servidor recreara las tablas al iniciarse
+    echo.
     echo Presiona cualquier tecla para volver al menu...
 ) ELSE (
     echo.
-    echo [ERROR] No se pudo limpiar los datos.
+    echo [ERROR] No se pudo limpiar los datos de la app.
     echo Verifica que el dispositivo este conectado.
     echo.
     pause

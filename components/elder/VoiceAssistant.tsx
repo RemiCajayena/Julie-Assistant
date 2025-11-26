@@ -1,18 +1,19 @@
-import { API_URL, getAlternativeUrls } from '@/config/api';
+import { API_URL } from '@/config/api';
 import { ConversationalEngine } from '@/utils/conversationalEngine';
+import { MultiTurnManager } from '@/utils/multiTurnManager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Audio, InterruptionModeAndroid } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 interface Message {
@@ -26,12 +27,16 @@ interface VoiceAssistantProps {
   userName?: string;
   userId: string;
   onMedicationAction?: (action: any) => Promise<string | void>;
+  enableMultiTurn?: boolean; // Nueva prop
+  maxTurns?: number; // Nueva prop
 }
 
 export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
   userName,
   userId,
   onMedicationAction,
+  enableMultiTurn = false,
+  maxTurns = 3,
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -45,10 +50,13 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const conversationalEngine = useRef(new ConversationalEngine()).current;
+  const multiTurnManager = useRef(new MultiTurnManager()).current; // Gestor multi-turno
   const conversationHistory = useRef<any[]>([]).current;
-  const currentSoundRef = useRef<Audio.Sound | null>(null); // Referencia al audio actual
+  const currentSoundRef = useRef<Audio.Sound | null>(null);
   const isLoadingHistory = useRef(false);
-  const scrollViewRef = useRef<ScrollView>(null); // Referencia para auto-scroll
+  const scrollViewRef = useRef<ScrollView>(null);
+  const currentTurnCount = useRef(0); // Contador de turnos actual
+  const waitingForNextTurn = useRef(false); // Flag para indicar que esperamos siguiente turno
 
   // Cargar historial de conversación al iniciar
   useEffect(() => {
@@ -408,6 +416,39 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
       // 3. Hablar respuesta
       await speakMessage(response);
 
+      // 4. Multi-turno: Continuar conversación si es necesario
+      if (enableMultiTurn) {
+        currentTurnCount.current++;
+        
+        const shouldContinue = multiTurnManager.shouldContinueConversation({
+          intent: 'conversation', // TODO: Obtener del análisis
+          sentiment: 'neutral',
+          requiresFollowUp: false,
+          turnCount: currentTurnCount.current,
+          isGreeting: transcription.toLowerCase().includes('hola') || 
+                      transcription.toLowerCase().includes('buenos'),
+          isQuestion: transcription.includes('?') || 
+                      transcription.toLowerCase().includes('qué') ||
+                      transcription.toLowerCase().includes('cómo'),
+          isEmergency: false,
+          lastUserMessage: transcription,
+          lastAssistantMessage: response
+        });
+
+        if (shouldContinue) {
+          console.log(`🔄 Continuando conversación (Turno ${currentTurnCount.current}/${maxTurns})`);
+          
+          // NO activar micrófono aquí - esperar a que termine el audio
+          // La activación se hará en el callback de finalización del audio
+          waitingForNextTurn.current = true;
+        } else {
+          console.log('🔚 Conversación finalizada');
+          currentTurnCount.current = 0;
+          multiTurnManager.reset();
+          waitingForNextTurn.current = false;
+        }
+      }
+
     } catch (error) {
       console.error('Error procesando mensaje:', error);
       const errorMsg = 'Disculpa, tuve un problema técnico. ¿Puedes intentar de nuevo?';
@@ -465,30 +506,11 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
           headers: {
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 20000,
+          timeout: 8000, // Reducido a 8s para respuestas más rápidas
         });
       } catch (error) {
-        console.log(`⚠️ Falló URL principal para transcripción, intentando alternativas...`);
+        console.error('❌ Error en transcripción:', error);
         lastError = error;
-        
-        // Intentar con URLs alternativas
-        const alternativeUrls = getAlternativeUrls();
-        for (const url of alternativeUrls) {
-          try {
-            console.log(`🔄 Intentando transcribir con: ${url}`);
-            response = await axios.post(`${url}/transcribe`, formData, {
-              headers: {
-                'Content-Type': 'multipart/form-data',
-              },
-              timeout: 20000,
-            });
-            console.log(`✅ Transcripción exitosa con: ${url}`);
-            break;
-          } catch (altError) {
-            lastError = altError;
-            continue;
-          }
-        }
       }
       
       if (!response) {
@@ -579,32 +601,11 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
           voice: 'es-US-Neural2-A',
         }, {
           responseType: 'arraybuffer',
-          timeout: 8000,
+          timeout: 4000, // Reducido a 4s para respuestas más rápidas
         });
       } catch (error) {
-        console.log(`⚠️ Falló URL principal, intentando alternativas...`);
+        console.error('❌ Error en TTS:', error);
         lastError = error;
-        
-        // Intentar con URLs alternativas
-        const alternativeUrls = getAlternativeUrls();
-        for (const url of alternativeUrls) {
-          try {
-            console.log(`🔄 Intentando: ${url}`);
-            response = await axios.post(`${url}/tts`, {
-              text,
-              voice: 'es-US-Neural2-A',
-            }, {
-              responseType: 'arraybuffer',
-              timeout: 8000,
-            });
-            console.log(`✅ Conectado exitosamente a: ${url}`);
-            break; // Si funciona, salir del loop
-          } catch (altError) {
-            console.log(`❌ Falló: ${url}`);
-            lastError = altError;
-            continue;
-          }
-        }
       }
       
       // Si ninguna URL funcionó, lanzar error
@@ -638,12 +639,22 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
           volume: 1.0,
           rate: 1.0,
         },
-        (status) => {
+        async (status) => {
           if (status.isLoaded && status.didJustFinish) {
             console.log('✅ Audio completado');
             setIsSpeaking(false);
             currentSoundRef.current = null;
-            sound.unloadAsync();
+            await sound.unloadAsync();
+            
+            // Si estamos esperando el siguiente turno, activar micrófono AHORA
+            if (waitingForNextTurn.current) {
+              console.log('⏳ Esperando 800ms adicionales antes de activar micrófono...');
+              setTimeout(async () => {
+                waitingForNextTurn.current = false;
+                console.log('🎤 Activando micrófono automáticamente para siguiente turno...');
+                await startRecording();
+              }, 800); // Buffer de 800ms después de que termine el audio
+            }
           }
         }
       );
@@ -694,10 +705,20 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
           rate: 0.95,        // Velocidad un poco más lenta (más clara)
           volume: 1.0,
           quality: 'enhanced', // Calidad mejorada si está disponible
-          onDone: () => {
+          onDone: async () => {
             console.log('✅ TTS completado');
             setIsSpeaking(false);
             resolve();
+            
+            // Si estamos esperando el siguiente turno, activar micrófono AHORA
+            if (waitingForNextTurn.current) {
+              console.log('⏳ Esperando 800ms adicionales antes de activar micrófono...');
+              setTimeout(async () => {
+                waitingForNextTurn.current = false;
+                console.log('🎤 Activando micrófono automáticamente para siguiente turno...');
+                await startRecording();
+              }, 800); // Buffer de 800ms después de que termine el audio
+            }
           },
           onError: (error: any) => {
             console.error('❌ Error en TTS:', error);
@@ -740,6 +761,20 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
     console.log('🤐 Deteniendo TTS...');
     await Speech.stop();
     setIsSpeaking(false);
+    
+    // Cancelar activación automática del micrófono
+    waitingForNextTurn.current = false;
+    
+    // Detener audio si está reproduciéndose
+    if (currentSoundRef.current) {
+      try {
+        await currentSoundRef.current.stopAsync();
+        await currentSoundRef.current.unloadAsync();
+      } catch (err) {
+        console.log('⚠️ Error deteniendo audio:', err);
+      }
+      currentSoundRef.current = null;
+    }
   };
 
   /**
@@ -800,6 +835,15 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
 
   return (
     <View style={styles.container}>
+      {/* Indicador de multi-turno activo */}
+      {enableMultiTurn && currentTurnCount.current > 0 && (
+        <View style={styles.multiTurnIndicator}>
+          <Text style={styles.multiTurnText}>
+            💬 Conversación activa: Turno {currentTurnCount.current}/{maxTurns}
+          </Text>
+        </View>
+      )}
+      
       {/* Botón principal de voz */}
       <View style={styles.mainContent}>
         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
@@ -922,6 +966,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     position: 'relative',
+  },
+  multiTurnIndicator: {
+    position: 'absolute',
+    top: 10,
+    left: '50%',
+    transform: [{ translateX: -100 }],
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    zIndex: 1000,
+  },
+  multiTurnText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   mainContent: {
     flex: 1,

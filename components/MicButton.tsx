@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ConversationalEngine } from '../utils/conversationalEngine';
 
@@ -19,6 +19,35 @@ export const MicButton = ({ onTranscription }: MicButtonProps) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [conversationalEngine] = useState(() => new ConversationalEngine());
   const [conversationHistory, setConversationHistory] = useState<any[]>([]);
+
+  // Limpieza al desmontar o cuando se cierra el modal
+  useEffect(() => {
+    return () => {
+      // Detener cualquier grabación activa
+      if (recording) {
+        recording.stopAndUnloadAsync().catch(e => {
+          console.log('⚠️ Cleanup recording:', e);
+        });
+      }
+      // Detener cualquier speech activo
+      Speech.stop();
+      stopPulseAnimation();
+    };
+  }, []);
+
+  // Limpieza cuando se cancela
+  const handleCancel = () => {
+    // Detener speech si está hablando
+    Speech.stop();
+    
+    // Resetear estado
+    setShowTextInput(false);
+    setInputText('');
+    setIsProcessing(false);
+    
+    // Detener animación
+    stopPulseAnimation();
+  };
 
   // Animación de pulso mientras graba
   const startPulseAnimation = () => {
@@ -92,8 +121,9 @@ export const MicButton = ({ onTranscription }: MicButtonProps) => {
         console.log('Grabación guardada en:', uri);
         setShowTextInput(true); // Mostrar input en lugar de procesar audio
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al detener grabación:', error);
+      setRecording(null);
       Alert.alert('Error', 'No pude procesar la grabación');
     }
   };
@@ -210,16 +240,14 @@ export const MicButton = ({ onTranscription }: MicButtonProps) => {
             <View style={styles.buttonRow}>
               <TouchableOpacity 
                 style={styles.cancelButton} 
-                onPress={() => {
-                  setShowTextInput(false);
-                  setInputText('');
-                }}
+                onPress={handleCancel}
               >
                 <Text>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.sendButton} 
                 onPress={handleSendText}
+                disabled={!inputText.trim()}
               >
                 <Text style={styles.sendText}>Enviar</Text>
               </TouchableOpacity>

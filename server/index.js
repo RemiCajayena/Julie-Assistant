@@ -4,18 +4,31 @@ import express from "express";
 import fs from "fs";
 import multer from "multer";
 import { OpenAI } from "openai";
+import * as appointmentSystem from './appointmentSystem.js';
 import * as db from './database.js';
+import * as firebase from './firebaseAdmin.js';
 import * as reminderSystem from './reminderSystem.js';
 import * as sms from './smsService.js';
 
 const app = express();
 
-// Configurar CORS para permitir todas las conexiones en desarrollo
+// Configuración avanzada de CORS y seguridad para desarrollo
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
 }));
+
+// Configurar cabeceras de seguridad para desarrollo
+app.use((req, res, next) => {
+  // Permitir conexiones no seguras en desarrollo
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  next();
+});
 
 app.use(express.json());
 
@@ -36,9 +49,27 @@ const GOOGLE_CLOUD_API_KEY = process.env.GOOGLE_CLOUD_API_KEY;
 
 db.initDatabase();
 
-// Iniciar sistema de recordatorios
+// Inicializar Firebase Admin SDK
 console.log('\n🚀 Iniciando Julie Assistant Server...');
+firebase.initializeFirebase();
+
+// Iniciar sistemas de notificaciones
 reminderSystem.startReminderSystem();
+appointmentSystem.startAppointmentSystem();
+
+// Endpoint raíz
+app.get("/", (req, res) => {
+  res.json({
+    message: "Julie Assistant API",
+    version: "1.0.0",
+    status: "running",
+    endpoints: {
+      ping: "/ping",
+      health: "/health",
+      serverInfo: "/server-info"
+    }
+  });
+});
 
 // Endpoint de prueba de conectividad mejorado
 app.get("/ping", (req, res) => {
@@ -277,16 +308,18 @@ app.get("/medications/:userId", async (req, res) => {
 
 /**
  * DELETE /medications/:medicationId
- * Desactivar un medicamento (no se elimina, solo se marca como inactivo)
+ * Eliminar permanentemente un medicamento de la base de datos
  */
 app.delete("/medications/:medicationId", async (req, res) => {
   try {
     const { medicationId } = req.params;
-    db.deactivateMedication(medicationId);
+    
+    // Eliminar permanentemente el medicamento
+    db.deleteMedication(medicationId);
 
-    res.json({ success: true, message: 'Medicamento desactivado' });
+    res.json({ success: true, message: 'Medicamento eliminado permanentemente' });
   } catch (error) {
-    console.error('❌ Error desactivando medicamento:', error);
+    console.error('❌ Error eliminando medicamento:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -394,6 +427,112 @@ app.get("/medication-logs/:medicationId", async (req, res) => {
 // =====================================
 // ENDPOINTS DE ALERTAS
 // =====================================
+
+/**
+ * POST /medications/taken
+ * Registrar múltiples medicamentos tomados (confirmación)
+ */
+app.post("/medications/taken", async (req, res) => {
+  try {
+    const { userId, medicationIds, reminderIds, timestamp } = req.body;
+
+    if (!userId || !medicationIds || !Array.isArray(medicationIds)) {
+      return res.status(400).json({ 
+        error: 'Faltan campos requeridos: userId, medicationIds (array)' 
+      });
+    }
+
+    console.log(`✅ Confirmación de medicamentos tomados: ${medicationIds.join(', ')}`);
+
+    // Registrar cada medicamento como tomado
+    const logs = medicationIds.map(medId => 
+      db.logMedicationTaken(medId, 'taken', `Confirmado vía asistente a las ${timestamp || new Date().toISOString()}`)
+    );
+
+    res.json({ 
+      success: true, 
+      logs,
+      message: 'Medicamentos registrados como tomados'
+    });
+  } catch (error) {
+    console.error('❌ Error registrando medicamentos tomados:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /alerts/missed-medication
+ * Enviar alerta al tutor sobre medicamento no tomado
+ */
+app.post("/alerts/missed-medication", async (req, res) => {
+  try {
+    const { userId, medicationIds, medicationNames, reminderIds, timestamp } = req.body;
+
+    if (!userId || !medicationNames || !Array.isArray(medicationNames)) {
+      return res.status(400).json({ 
+        error: 'Faltan campos requeridos: userId, medicationNames (array)' 
+      });
+    }
+
+    const tutor = db.getTutor(userId);
+
+    if (!tutor) {
+      return res.status(404).json({ 
+        error: 'No hay tutor registrado para este usuario' 
+      });
+    }
+
+    const medicationText = medicationNames.join(' y ');
+    const message = `⚠️ ALERTA: Tu familiar no ha confirmado tomar ${medicationText}. Verifica que lo haya tomado.`;
+
+    console.log(`⚠️ Enviando alerta de medicamento no tomado: ${medicationText}`);
+
+    // Enviar notificación FCM al tutor
+    if (firebase.isFirebaseInitialized()) {
+      const notificationData = {
+        type: 'missed_medication_alert',
+        medicationIds: medicationIds?.join(',') || '',
+        medicationNames: medicationText,
+        timestamp: timestamp || new Date().toISOString(),
+        screen: 'medications',
+        priority: 'urgent'
+      };
+
+      await firebase.sendNotificationToUser(
+        userId,
+        {
+          title: '⚠️ Medicamento No Confirmado',
+          body: message
+        },
+        notificationData,
+        db.getDeviceTokens,
+        {
+          color: '#EF4444',
+          priority: 'max',
+          sound: 'default',
+          badge: 1
+        }
+      );
+    }
+
+    // Enviar SMS al tutor
+    const smsResult = await sms.sendSMS(tutor.phone, message);
+
+    // Registrar alerta
+    if (smsResult.success) {
+      db.logAlert(userId, 'missed_medication', message);
+    }
+
+    res.json({ 
+      success: true, 
+      alertSent: smsResult.success,
+      message: 'Alerta enviada al tutor'
+    });
+  } catch (error) {
+    console.error('❌ Error enviando alerta:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 /**
  * POST /alert-tutor
@@ -867,9 +1006,12 @@ app.post("/appointments", async (req, res) => {
   try {
     let { userId, title, description, appointment_date, appointment_time, location, doctor, reminder_time_before } = req.body;
 
-    // Asegurar que reminder_time_before sea array
-    if (!Array.isArray(reminder_time_before)) {
-      reminder_time_before = [reminder_time_before || 60];
+    // Asegurar que reminder_time_before sea array con valores por defecto
+    if (!reminder_time_before || reminder_time_before.length === 0) {
+      // Default: a la hora exacta, 1 hora antes, 24 horas antes
+      reminder_time_before = [0, 60, 1440];
+    } else if (!Array.isArray(reminder_time_before)) {
+      reminder_time_before = [reminder_time_before];
     }
     
     if (!userId || !title || !appointment_date || !appointment_time) {
@@ -1018,13 +1160,18 @@ app.delete("/appointments/:id", async (req, res) => {
  */
 app.post("/tutor", async (req, res) => {
   try {
+    console.log('📥 POST /tutor - Request recibido');
     const { userId, name, phone, relationship } = req.body;
+    console.log('📝 Datos recibidos:', { userId, name, phone, relationship });
     
     if (!userId || !name || !phone) {
+      console.log('❌ Faltan datos requeridos');
       return res.status(400).json({ error: 'Faltan datos requeridos: userId, name, phone' });
     }
     
+    console.log('💾 Llamando a db.registerTutor...');
     const tutor = db.registerTutor(userId, { name, phone, relationship });
+    console.log('✅ Tutor registrado:', tutor);
     
     res.json({ 
       success: true,
@@ -1155,6 +1302,157 @@ app.post("/notifications/send", async (req, res) => {
 });
 
 /**
+ * POST /notifications/send-fcm
+ * Enviar notificación push FCM a un usuario
+ */
+app.post("/notifications/send-fcm", async (req, res) => {
+  try {
+    if (!firebase.isFirebaseInitialized()) {
+      return res.status(503).json({ 
+        error: 'Firebase Admin SDK no está inicializado',
+        message: 'Verifica que firebase-service-account.json exista en la carpeta server/'
+      });
+    }
+
+    // Permitir userId o user_id
+    let { userId, user_id, title, body, data } = req.body;
+    userId = userId || user_id;
+
+    if (!userId || !title || !body) {
+      return res.status(400).json({ 
+        error: 'userId (o user_id), title y body son requeridos' 
+      });
+    }
+
+    console.log(`📤 Enviando notificación FCM a usuario ${userId}`);
+    console.log(`   Título: ${title}`);
+    console.log(`   Mensaje: ${body}`);
+
+    // Enviar notificación usando Firebase Admin SDK
+    const result = await firebase.sendNotificationToUser(
+      userId,
+      { title, body },
+      data || {},
+      db.getDeviceTokens
+    );
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Notificación FCM enviada',
+        successCount: result.successCount,
+        failureCount: result.failureCount,
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: result.error || 'No se pudo enviar la notificación'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error enviando notificación FCM:', error);
+    res.status(500).json({ 
+      error: error.message,
+      code: error.code 
+    });
+  }
+});
+
+/**
+ * POST /test-notification
+ * Enviar notificación de prueba inmediata
+ * 
+ * Body: {
+ *   userId: string (requerido),
+ *   title?: string,
+ *   body?: string,
+ *   imageUrl?: string (URL de imagen grande),
+ *   icon?: string (nombre del icono),
+ *   sound?: string ('default', 'custom_sound'),
+ *   color?: string (ej: '#FF5722'),
+ *   priority?: string ('high', 'normal', 'low'),
+ *   vibrate?: number[] (ej: [300, 200, 300]),
+ *   badge?: number (número en el icono de la app),
+ *   data?: Object (datos personalizados)
+ * }
+ */
+app.post("/test-notification", async (req, res) => {
+  try {
+    const { 
+      userId, 
+      title, 
+      body, 
+      imageUrl, 
+      icon,
+      sound, 
+      color, 
+      priority, 
+      vibrate, 
+      badge,
+      data: customData 
+    } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId es requerido' });
+    }
+
+    const notificationTitle = title || '🧪 Notificación de Prueba';
+    const notificationBody = body || 'Esta es una prueba del sistema de notificaciones de Julie Assistant';
+
+    console.log(`\n🧪 [TEST] Enviando notificación de prueba a userId=${userId}`);
+    console.log(`   Título: ${notificationTitle}`);
+    console.log(`   Cuerpo: ${notificationBody}`);
+    if (imageUrl) console.log(`   Imagen: ${imageUrl}`);
+    if (color) console.log(`   Color: ${color}`);
+    if (sound) console.log(`   Sonido: ${sound}`);
+
+    const result = await firebase.sendNotificationToUser(
+      userId,
+      { 
+        title: notificationTitle, 
+        body: notificationBody,
+        imageUrl,
+        icon,
+      },
+      { 
+        type: 'test', 
+        timestamp: new Date().toISOString(),
+        ...customData,
+      },
+      db.getDeviceTokens,
+      {
+        sound,
+        color,
+        priority,
+        vibrate,
+        badge,
+      }
+    );
+
+    if (result.success) {
+      console.log('✅ Notificación de prueba enviada exitosamente');
+      res.json({
+        success: true,
+        message: 'Notificación enviada',
+        sentTo: result.sentTo,
+      });
+    } else {
+      console.log('⚠️  No se pudo enviar notificación de prueba:', result.error);
+      res.status(400).json({
+        success: false,
+        error: result.error,
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error en /test-notification:', error);
+    res.status(500).json({
+      error: 'Error enviando notificación de prueba',
+      details: error.message,
+    });
+  }
+});
+
+/**
  * POST /notifications/:notificationId/response
  * Registrar respuesta del usuario a una notificación
  */
@@ -1181,31 +1479,9 @@ app.post("/notifications/:notificationId/response", async (req, res) => {
   }
 });
 
-// Registrar callback para que el sistema de recordatorios envíe notificaciones
-reminderSystem.registerNotificationCallback(async (notificationData) => {
-  const { userId, title, body, data } = notificationData;
-  
-  const deviceInfo = deviceTokens.get(userId);
-  
-  if (deviceInfo) {
-    console.log(`📱 Enviando notificación push automática a usuario ${userId}`);
-    
-    // Aquí se enviaría la notificación real a través de Expo Push
-    const notification = {
-      to: deviceInfo.token,
-      sound: 'default',
-      title,
-      body,
-      data,
-    };
-    
-    console.log('📤 Notificación:', notification);
-    
-    // TODO: Enviar a Expo Push Service
-  } else {
-    console.log(`⚠️ No hay dispositivo registrado para usuario ${userId}`);
-  }
-});
+// NOTA: El callback legacy de Expo Push ya no es necesario
+// El sistema de recordatorios ahora usa Firebase Admin SDK directamente
+// Ver reminderSystem.js -> sendNotification()
 
 /**
  * GET /tutor/:userId
@@ -1329,6 +1605,110 @@ app.post("/tts", express.json(), async (req, res) => {
   }
 });
 
+// ============================================
+// 🎬 ENDPOINTS PARA DEMO
+// ============================================
+
+/**
+ * Listar todos los medicamentos para fácil selección en demo
+ * GET /demo/medications/:userId
+ */
+app.get('/demo/medications/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log(`📋 [DEMO] Obteniendo medicamentos para usuario: ${userId}`);
+    
+    const medications = db.getMedications(userId);
+    console.log(`✅ Encontrados ${medications.length} medicamentos`);
+    
+    res.json({ medications: medications || [] });
+  } catch (error) {
+    console.error('❌ Error obteniendo medicamentos:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Forzar un recordatorio de medicamento para demostración
+ * POST /demo/trigger-reminder
+ * Body: { userId, medicationName }
+ */
+app.post('/demo/trigger-reminder', async (req, res) => {
+  try {
+    console.log('🎬 [DEMO] Forzando recordatorio de medicamento...');
+    const { userId, medicationName } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId es requerido' });
+    }
+
+    // Obtener medicamento específico
+    const medications = db.getMedications(userId);
+    let medication;
+    
+    if (medicationName) {
+      medication = medications.find(m => m.name === medicationName);
+    } else {
+      medication = medications[0];
+    }
+
+    if (!medication) {
+      return res.status(404).json({ error: 'No se encontró medicamento' });
+    }
+
+    // Obtener token FCM del usuario usando device_tokens table
+    const tokens = db.getDeviceTokens(userId);
+    
+    if (!tokens || tokens.length === 0) {
+      return res.status(400).json({ error: 'Usuario no tiene token FCM registrado' });
+    }
+
+    const fcmToken = tokens[0].token;
+
+    // Enviar notificación de recordatorio
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: `💊 Recordatorio: ${medication.name}`,
+        body: `Es hora de tomar tu ${medication.name} ${medication.dosage}`,
+      },
+      data: {
+        type: 'medication_reminder',
+        medicationId: medication.id.toString(),
+        medicationName: medication.name,
+        dosage: medication.dosage || '',
+        action: 'reminder'
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'medication_reminders',
+          priority: 'high',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+        }
+      }
+    };
+
+    await firebase.getMessaging().send(message);
+
+    console.log(`✅ [DEMO] Recordatorio enviado: ${medication.name}`);
+    res.json({
+      success: true,
+      message: 'Recordatorio enviado',
+      medication: {
+        name: medication.name,
+        dosage: medication.dosage
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ [DEMO] Error forzando recordatorio:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // =====================================
 // MANEJADOR DE ERRORES GLOBAL
 // =====================================
@@ -1353,16 +1733,57 @@ app.use((err, req, res, next) => {
 });
 
 // =====================================
-// INICIO DEL SERVIDOR
+// ENDPOINTS DE CONFIGURACIÓN
 // =====================================
+
+/**
+ * GET /api/server-info
+ * Obtener información del servidor incluyendo su IP
+ */
+app.get("/api/server-info", (req, res) => {
+  const serverInfo = {
+    ip: getLocalIP(),
+    port: PORT,
+    timestamp: new Date().toISOString()
+  };
+  res.json(serverInfo);
+});
+
+// =====================================
+// CONFIGURACIÓN DEL SERVIDOR
+// =====================================
+
+// Función para obtener la IP local del servidor
+function getServerIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Solo IPv4 y no localhost
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
+// Endpoint para obtener información del servidor
+app.get('/server-info', (req, res) => {
+  res.json({
+    ip: getServerIP(),
+    port: PORT,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Variable para mantener referencia al sistema de recordatorios
 let reminderIntervalId = null;
 
-// Cerrar BD y sistema de recordatorios al apagar servidor
+// Cerrar BD y sistemas de notificaciones al apagar servidor
 process.on('SIGINT', () => {
   console.log('\n⏹️  Cerrando servidor...');
-  reminderSystem.stopReminderSystem(reminderIntervalId);
+  reminderSystem.stopReminderSystem();
+  appointmentSystem.stopAppointmentSystem();
   db.closeDatabase();
   process.exit(0);
 });
@@ -1422,6 +1843,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`   • PUT  /medication-requests/:id   - Actualizar solicitud`);
   console.log(`   • PUT  /medication-requests/:id/approve  - Aprobar`);
   console.log(`   • PUT  /medication-requests/:id/reject   - Rechazar`);
+  console.log(`   • POST /demo/trigger-reminder    - [DEMO] Forzar recordatorio`);
   console.log("\n💡 Tip: Para Android Emulator ejecuta:");
   console.log(`   adb reverse tcp:${PORT} tcp:${PORT}`);
   console.log("\n" + "=".repeat(60) + "\n");
@@ -1434,9 +1856,6 @@ server.on('error', (error) => {
     console.error('   Soluciones:');
     console.error('   1. Cierra el proceso que está usando el puerto');
     console.error('   2. O cambia el puerto en el código');
-    console.error('\n   Para encontrar el proceso en Windows:');
-    console.error(`   netstat -ano | findstr :${PORT}`);
-    console.error('   taskkill /PID <número> /F\n');
   } else {
     console.error('\n❌ ERROR del servidor:', error);
   }

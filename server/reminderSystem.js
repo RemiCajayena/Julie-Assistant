@@ -4,6 +4,7 @@
  */
 
 import * as db from './database.js';
+import * as firebase from './firebaseAdmin.js';
 import * as sms from './smsService.js';
 
 // Callbacks para notificaciones en la app
@@ -14,8 +15,8 @@ const sentReminders = new Map();
 
 // Configuración de recordatorios
 const REMINDER_CONFIG = {
-  checkInterval: 60000, // Verificar cada 1 minuto
-  reminderWindow: 15, // Ventana de 15 minutos antes del horario
+  checkInterval: 30000, // Verificar cada 30 segundos (más preciso)
+  reminderWindow: 2, // Ventana de ±2 minutos para enviar recordatorio
   reminderRepeat: 30, // Repetir recordatorio cada 30 minutos si no se toma
   maxReminders: 3, // Máximo 3 recordatorios por medicamento
 };
@@ -26,6 +27,88 @@ const REMINDER_CONFIG = {
 export function registerNotificationCallback(callback) {
   notificationCallbacks.push(callback);
   console.log('📱 Callback de notificación registrado');
+}
+
+/**
+ * Enviar notificación agrupada para múltiples medicamentos
+ */
+async function sendGroupedNotification(reminders, userId) {
+  const medicationList = reminders.map(r => ({
+    name: r.medication_name || r.title,
+    dosage: r.dosage || ''
+  }));
+
+  // Crear mensaje agrupado
+  const medicationText = medicationList
+    .map(med => `${med.dosage ? med.dosage + ' de ' : ''}${med.name}`)
+    .join(' y ');
+
+  const message = `⏰ Es hora de tomar ${medicationText}`;
+
+  console.log(`📢 Enviando notificación agrupada: ${message} a usuario ${userId}`);
+
+  // Registrar notificación para el primer recordatorio (representante del grupo)
+  const notification = db.logNotification(reminders[0].id, userId);
+
+  // Enviar notificación FCM con todos los medicamentos
+  try {
+    if (firebase.isFirebaseInitialized()) {
+      const notificationData = {
+        type: 'medication_reminder',
+        grouped: true,
+        medications: medicationList,
+        medicationIds: reminders.map(r => String(r.medication_id || '')).join(','),
+        reminderIds: reminders.map(r => String(r.id)).join(','),
+        notificationId: String(notification.id),
+        screen: 'medications'
+      };
+
+      const notificationOptions = {
+        color: '#4CAF50',
+        priority: 'high',
+        sound: 'default',
+        badge: reminders.length
+      };
+
+      const result = await firebase.sendNotificationToUser(
+        userId,
+        {
+          title: '💊 Recordatorio de Medicamentos',
+          body: message
+        },
+        notificationData,
+        db.getDeviceTokens,
+        notificationOptions
+      );
+
+      if (result.success) {
+        console.log(`✅ Notificación agrupada FCM enviada exitosamente a ${userId}`);
+      } else {
+        console.warn(`⚠️ No se pudo enviar notificación agrupada: ${result.error}`);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error enviando notificación agrupada:', error);
+  }
+
+  // Notificar al tutor por SMS
+  try {
+    const tutor = db.getTutor(userId);
+    if (tutor && tutor.phone) {
+      const fromNumber = process.env.TWILIO_PHONE_NUMBER || '';
+      if (tutor.phone !== fromNumber) {
+        await sms.sendSMS(
+          tutor.phone,
+          `Julie Recordatorio: ${message} para tu familiar.`
+        );
+        console.log(`📱 SMS enviado al tutor: ${tutor.phone}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error enviando SMS al tutor:', error);
+  }
+
+  return notification;
 }
 
 /**
@@ -41,7 +124,52 @@ async function sendNotification(reminder, userId) {
   // 1. Registrar en base de datos
   const notification = db.logNotification(reminder.id, userId);
 
-  // 2. Enviar a la app (si hay callbacks registrados)
+  // 2. Enviar notificación push FCM (método principal)
+  try {
+    if (firebase.isFirebaseInitialized()) {
+      const notificationData = {
+        type: 'medication_reminder',
+        medicationId: String(reminder.medication_id || ''),
+        medicationName: reminder.medication_name || reminder.title,
+        dosage: reminder.dosage || '',
+        frequency: reminder.description || '',
+        reminderId: String(reminder.id),
+        notificationId: String(notification.id),
+        screen: 'medications'
+      };
+
+      // Opciones de notificación personalizadas para medicamentos
+      const notificationOptions = {
+        color: '#4CAF50', // Verde para medicamentos
+        priority: 'high',
+        sound: 'default',
+        badge: 1
+      };
+
+      const result = await firebase.sendNotificationToUser(
+        userId,
+        {
+          title: '💊 Recordatorio de Medicamento',
+          body: message
+        },
+        notificationData,
+        db.getDeviceTokens,
+        notificationOptions
+      );
+
+      if (result.success) {
+        console.log(`✅ Notificación FCM enviada exitosamente a ${userId}`);
+      } else {
+        console.warn(`⚠️ No se pudo enviar notificación FCM: ${result.error}`);
+      }
+    } else {
+      console.warn('⚠️ Firebase Admin SDK no inicializado, no se envió notificación push');
+    }
+  } catch (error) {
+    console.error('❌ Error enviando notificación FCM:', error);
+  }
+
+  // 3. Enviar a través de callbacks legacy (mantener por compatibilidad)
   if (notificationCallbacks.length > 0) {
     const notificationData = {
       id: notification.id,
@@ -60,20 +188,27 @@ async function sendNotification(reminder, userId) {
       try {
         await callback(notificationData);
       } catch (error) {
-        console.error('Error enviando notificación a la app:', error);
+        console.error('Error enviando notificación legacy:', error);
       }
     }
   }
 
-  // 3. Notificar al tutor por SMS (opcional)
+  // 4. Notificar al tutor por SMS (opcional)
   try {
     const tutor = db.getTutor(userId);
     if (tutor && tutor.phone) {
-      await sms.sendSMS(
-        tutor.phone,
-        `Julie Recordatorio: ${message} para tu familiar.`
-      );
-      console.log(`📱 SMS enviado al tutor: ${tutor.phone}`);
+      // No enviar SMS si el número del tutor es el mismo que el FROM de SMS
+      // (evita error de Twilio cuando se envía a sí mismo)
+      const fromNumber = process.env.TWILIO_PHONE_NUMBER || '';
+      if (tutor.phone !== fromNumber) {
+        await sms.sendSMS(
+          tutor.phone,
+          `Julie Recordatorio: ${message} para tu familiar.`
+        );
+        console.log(`📱 SMS enviado al tutor: ${tutor.phone}`);
+      } else {
+        console.log(`ℹ️ SMS no enviado: número del tutor es el mismo que el número FROM`);
+      }
     }
   } catch (error) {
     console.error('Error enviando SMS al tutor:', error);
@@ -94,12 +229,13 @@ function shouldSendReminder(reminderTime) {
   
   const diffMinutes = (reminderDate - now) / (1000 * 60);
   
-  // Enviar dentro de la ventana de recordatorio (ej: 15 minutos antes o a la hora exacta)
-  return diffMinutes >= -5 && diffMinutes <= REMINDER_CONFIG.reminderWindow;
+  // Enviar dentro de la ventana de recordatorio configurada (±2 minutos por defecto)
+  return Math.abs(diffMinutes) <= REMINDER_CONFIG.reminderWindow;
 }
 
 /**
  * Verificar recordatorios programados y enviar notificaciones
+ * Agrupa medicamentos con la misma hora en una sola notificación
  */
 export async function checkMedicationReminders() {
   try {
@@ -112,6 +248,9 @@ export async function checkMedicationReminders() {
 
     console.log(`🔔 Verificando ${dueReminders.length} recordatorios programados (excluyendo snoozed)...`);
 
+    // Agrupar recordatorios por usuario y hora
+    const reminderGroups = new Map();
+
     for (const reminder of dueReminders) {
       const key = `${reminder.id}-${new Date().toDateString()}`;
       
@@ -119,19 +258,43 @@ export async function checkMedicationReminders() {
       if (sentReminders.has(key)) {
         const sentCount = sentReminders.get(key);
         if (sentCount >= REMINDER_CONFIG.maxReminders) {
-          continue; // Ya se enviaron los recordatorios máximos
+          continue;
         }
       }
 
       // Verificar si está dentro de la ventana de tiempo
       if (shouldSendReminder(reminder.reminder_time)) {
-        await sendNotification(reminder, reminder.user_id);
+        // Agrupar por usuario y hora (redondeada a 5 minutos)
+        const [hours, minutes] = reminder.reminder_time.split(':').map(Number);
+        const roundedMinutes = Math.floor(minutes / 5) * 5;
+        const groupKey = `${reminder.user_id}-${hours}:${roundedMinutes}`;
         
-        // Marcar como enviado
+        if (!reminderGroups.has(groupKey)) {
+          reminderGroups.set(groupKey, []);
+        }
+        reminderGroups.get(groupKey).push(reminder);
+      }
+    }
+
+    // Enviar notificaciones agrupadas
+    for (const [groupKey, reminders] of reminderGroups) {
+      const userId = reminders[0].user_id;
+      
+      if (reminders.length > 1) {
+        // Múltiples medicamentos a la misma hora - enviar agrupados
+        console.log(`📦 Agrupando ${reminders.length} medicamentos para usuario ${userId}`);
+        await sendGroupedNotification(reminders, userId);
+      } else {
+        // Un solo medicamento - enviar individual
+        await sendNotification(reminders[0], userId);
+      }
+
+      // Marcar todos como enviados
+      for (const reminder of reminders) {
+        const key = `${reminder.id}-${new Date().toDateString()}`;
         const count = (sentReminders.get(key) || 0) + 1;
         sentReminders.set(key, count);
-        
-        console.log(`✅ Recordatorio enviado: ${reminder.title} (${count}/${REMINDER_CONFIG.maxReminders})`);
+        console.log(`✅ Recordatorio marcado: ${reminder.title} (${count}/${REMINDER_CONFIG.maxReminders})`);
       }
     }
   } catch (error) {
@@ -170,9 +333,9 @@ export function startReminderSystem() {
     return reminderInterval;
   }
 
-  console.log('🚀 Iniciando sistema de recordatorios...');
+  console.log('🚀 Iniciando sistema de recordatorios de medicamentos...');
   console.log(`⏰ Intervalo de verificación: ${REMINDER_CONFIG.checkInterval / 1000}s`);
-  console.log(`📢 Ventana de recordatorio: ${REMINDER_CONFIG.reminderWindow} minutos antes`);
+  console.log(`📢 Ventana de precisión: ±${REMINDER_CONFIG.reminderWindow} minutos`);
   
   // Verificar inmediatamente al iniciar
   checkMedicationReminders();

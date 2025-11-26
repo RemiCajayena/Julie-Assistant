@@ -120,7 +120,46 @@ export const useMedications = (userId: string) => {
       setError(null);
 
       const response = await axios.get(`${API_URL}/medications/${userId}`);
-      const serverMeds = response.data.medications;
+      let serverMeds = response.data.medications;
+
+      // Cargar reminders para calcular el estado de cada medicamento
+      try {
+        const remindersResp = await axios.get(`${API_URL}/reminders/${userId}`);
+        const allReminders = remindersResp.data?.reminders || [];
+
+        // Calcular isReminderEnabled y enabledTimes para cada medicamento
+        serverMeds = serverMeds.map((med: Medication) => {
+          const medReminders = allReminders.filter((r: any) => r.medication_id === med.id);
+          
+          if (medReminders.length === 0) {
+            return { ...med, isReminderEnabled: true, enabledTimes: {} };
+          }
+
+          const times = (med.schedule || '').split(',').map((t: string) => t.trim()).filter(Boolean);
+          const enabledTimes: { [key: number]: boolean } = {};
+          let anyActive = false;
+
+          times.forEach((time: string, index: number) => {
+            const reminder = medReminders.find((r: any) => r.reminder_time === time);
+            const isActive = reminder ? reminder.active === 1 : false;
+            enabledTimes[index] = isActive;
+            if (isActive) anyActive = true;
+          });
+
+          return {
+            ...med,
+            isReminderEnabled: anyActive,
+            enabledTimes
+          };
+        });
+      } catch (reminderErr) {
+        console.warn('Error cargando reminders, usando defaults:', reminderErr);
+        serverMeds = serverMeds.map((med: Medication) => ({
+          ...med,
+          isReminderEnabled: true,
+          enabledTimes: {}
+        }));
+      }
 
       setMedications(serverMeds);
       await saveLocalMedications(serverMeds);

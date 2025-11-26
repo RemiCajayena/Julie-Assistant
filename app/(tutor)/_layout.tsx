@@ -13,7 +13,11 @@ export default function TutorLayout() {
       }}
     >
       <Stack.Screen name="dashboard" />
-      <Stack.Screen name="medications" />
+      <Stack.Screen name="appointments" />
+      <Stack.Screen name="medication-requests" />
+      <Stack.Screen name="edit-request" />
+      <Stack.Screen name="reminders" />
+      <Stack.Screen name="tutor-setup" />
     </Stack>
   );
 }

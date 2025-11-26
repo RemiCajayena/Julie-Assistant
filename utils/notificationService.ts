@@ -1,13 +1,16 @@
 /**
- * Servicio de Notificaciones Push
- * Integra expo-notifications con el sistema de recordatorios del servidor
+ * Servicio de Notificaciones Push con Firebase Cloud Messaging
+ * Integra Firebase FCM con el sistema de recordatorios del servidor
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-const API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+// Usar IP local para dispositivos físicos, localhost para emulador
+const API_URL = Platform.OS === 'android' 
+  ? 'http://192.168.1.207:3000'  // IP de tu PC en la red local
+  : 'http://localhost:3000';
 
 interface PushNotificationData {
   id: number;
@@ -58,37 +61,57 @@ export async function sendPushNotification(
 }
 
 /**
- * Registrar token de dispositivo en el servidor
+ * Registrar token FCM de dispositivo en el servidor
  */
 export async function registerDeviceToken(userId: number, token: string) {
   try {
-    // Si es modo desarrollo/local, solo guardar localmente
-    if (token === 'development-mode-token') {
-      console.log('📱 Modo desarrollo: notificaciones locales habilitadas');
-      await AsyncStorage.setItem('notification_mode', 'local');
-      await AsyncStorage.setItem('deviceToken', token);
-      return true;
-    }
+    console.log(`\n========== REGISTRO DE TOKEN FCM ==========`);
+    console.log(`📱 Usuario: ${userId} (tipo: ${typeof userId})`);
+    console.log(`🔑 Token: ${token.substring(0, 30)}...${token.substring(token.length - 10)}`);
+    console.log(`📡 Servidor: ${API_URL}/devices/register`);
+    console.log(`📱 Plataforma: ${Platform.OS}`);
+
+    const requestBody = {
+      userId: String(userId), // Forzar como string
+      token: String(token),
+      platform: Platform.OS,
+      tokenType: 'fcm',
+    };
+    
+    console.log(`📤 Enviando:`, JSON.stringify(requestBody, null, 2));
 
     const response = await fetch(`${API_URL}/devices/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        token,
-        platform: Platform.OS,
-      }),
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
     });
 
+    console.log(`📥 Status HTTP: ${response.status} ${response.statusText}`);
+    
+    const responseData = await response.json();
+    console.log(`📊 Respuesta completa:`, JSON.stringify(responseData, null, 2));
+    
     if (response.ok) {
       await AsyncStorage.setItem('deviceToken', token);
-      await AsyncStorage.setItem('notification_mode', 'push');
-      console.log('✅ Token de dispositivo registrado en servidor');
+      await AsyncStorage.setItem('notification_mode', 'fcm');
+      console.log('✅ Token FCM registrado exitosamente en servidor');
+      console.log(`=========================================\n`);
       return true;
+    } else {
+      console.error('❌ Error del servidor al registrar token');
+      console.error('📄 Detalles:', responseData);
+      console.log(`=========================================\n`);
+      return false;
     }
-    return false;
-  } catch (error) {
-    console.error('Error registrando token de dispositivo:', error);
+  } catch (error: any) {
+    console.error('❌ EXCEPCIÓN al registrar token FCM');
+    console.error('📄 Error:', error);
+    console.error('📄 Mensaje:', error?.message);
+    console.error('📄 Stack:', error?.stack);
+    console.log(`=========================================\n`);
     // Fallback a modo local
     await AsyncStorage.setItem('notification_mode', 'local');
     return false;

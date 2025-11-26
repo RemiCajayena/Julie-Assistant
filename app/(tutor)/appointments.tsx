@@ -4,6 +4,7 @@
  */
 
 import { TimePicker } from '@/components/TimePicker';
+import { useServerUrl } from '@/config/api';
 import { theme } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,7 +14,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,8 +35,6 @@ const colors = {
   gray: '#9ca3af',
 };
 
-const API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
-
 interface Appointment {
   id: number;
   user_id: string;
@@ -52,6 +50,7 @@ interface Appointment {
 }
 
 export default function AppointmentsScreen() {
+  const { url } = useServerUrl();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -93,7 +92,7 @@ export default function AppointmentsScreen() {
   const loadAppointments = async (uid: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/appointments/${uid}?active_only=true`);
+      const response = await fetch(`${url}/appointments/${uid}?active_only=true`);
       if (response.ok) {
         const data = await response.json();
         // Ordenar por fecha y hora
@@ -180,14 +179,14 @@ export default function AppointmentsScreen() {
       let response;
       if (editingId) {
         // Actualizar
-        response = await fetch(`${API_URL}/appointments/${editingId}`, {
+        response = await fetch(`${url}/appointments/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(appointmentData),
         });
       } else {
         // Crear
-        response = await fetch(`${API_URL}/appointments`, {
+        response = await fetch(`${url}/appointments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(appointmentData),
@@ -219,7 +218,7 @@ export default function AppointmentsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await fetch(`${API_URL}/appointments/${id}`, {
+              const response = await fetch(`${url}/appointments/${id}`, {
                 method: 'DELETE',
               });
 

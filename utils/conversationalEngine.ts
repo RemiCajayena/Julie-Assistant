@@ -1,5 +1,10 @@
+import { confirmMedicationTaken } from '../services/medicationConfirmationService';
 import { JulieMemorySystem } from './embeddingSystem';
 import { AdvancedIntentAnalyzer, IntentAnalysis } from './intentAnalysis';
+import { responseCache } from './responseCache';
+
+import { getLocationContext } from '../services/locationService';
+import { getNewsContext } from '../services/newsService';
 
 export class ConversationalEngine {
   private memorySystem: JulieMemorySystem;
@@ -14,132 +19,164 @@ export class ConversationalEngine {
     message: string, 
     conversationHistory: any[],
     userContext: any,
-    onMedicationAction?: (action: any) => Promise<string | void>
+    onMedicationAction?: (action: any) => Promise<string | void>,
+    userId?: string // ID del usuario para solicitudes
   ): Promise<string> {
-    
-    // 1. Analizar intención y entidades
-    const analysis = await this.intentAnalyzer.analyzeMessage(message, conversationHistory);
-    
-    console.log('📊 Análisis completo:', {
-      intent: analysis.intent,
-      medicationAction: analysis.medicationAction,
-      tieneCallback: !!onMedicationAction
-    });
-    
-    // 2. Manejar acciones de medicamentos si están presentes
-    if (analysis.medicationAction && analysis.medicationAction.action && onMedicationAction) {
-      console.log('🏥 Ejecutando acción de medicamento:', analysis.medicationAction);
-      try {
-        const actionResult = await onMedicationAction(analysis.medicationAction);
-        console.log('✅ Acción de medicamento ejecutada exitosamente');
-        
-        // Si la acción es 'query' y devuelve un string, usarlo como respuesta
-        if (analysis.medicationAction.action === 'query' && typeof actionResult === 'string') {
-          console.log('📋 Usando lista de medicamentos del callback');
-          return actionResult;
-        }
-      } catch (error) {
-        console.error('❌ Error ejecutando acción de medicamento:', error);
+    const startTime = Date.now();
+
+    // 1. Cache check rápido
+    if (conversationHistory.length >= 5) {
+      const cachedResponse = responseCache.get(message);
+      if (cachedResponse) {
+        console.log(`⚡ Cache hit (${Date.now() - startTime}ms)`);
+        return cachedResponse;
       }
-    } else if (analysis.medicationAction && analysis.medicationAction.action) {
-      console.warn('⚠️ Acción de medicamento detectada pero NO HAY CALLBACK');
     }
     
-    // 3. Buscar memorias relevantes usando embeddings
-    console.log('🧠 Buscando memorias relevantes con embeddings...');
-    const relevantMemories = await this.memorySystem.findRelevantMemories(message);
-    console.log(`✅ Encontradas ${relevantMemories.length} memorias relevantes`);
+    // 2. Análisis de intención (sincrónico, rápido)
+    const analysisStart = Date.now();
+    const analysis = await this.intentAnalyzer.analyzeMessage(message, conversationHistory);
+    console.log(`📊 Análisis: ${Date.now() - analysisStart}ms`, {
+      intent: analysis.intent,
+      medication: analysis.medicationAction?.action
+    });
     
-    // 4. Guardar mensaje actual en memoria con embedding
-    await this.memorySystem.storeMemory(
-      message, 
-      'conversation', 
-      this.calculateImportance(analysis)
-    );
+    // 3. Manejar acciones de medicamentos (prioritario)
+    if (analysis.medicationAction?.action) {
+      if (onMedicationAction) {
+        try {
+          if (analysis.medicationAction.action === 'taken') {
+            await confirmMedicationTaken(); 
+          }
+          
+          const actionResult = await onMedicationAction(analysis.medicationAction);
+          
+          if (analysis.medicationAction.action === 'query' && typeof actionResult === 'string') {
+            console.log(`⚡ Total: ${Date.now() - startTime}ms`);
+            return actionResult;
+          }
+        } catch (error) {
+          console.error('❌ Error en acción medicamento:', error);
+        }
+      } else if (analysis.medicationAction.action === 'query') {
+        return 'Lo siento, no puedo consultar tus medicamentos ahora.';
+      }
+    }
     
-    // Mostrar estadísticas del sistema de memoria
-    const stats = this.memorySystem.getStats();
-    console.log('📊 Stats memoria:', stats);
-    
-    // 5. Construir prompt contextual
-    const contextualPrompt = this.buildContextualPrompt(
+    // 4. Construcción de contexto SOLO si es necesario (sin embeddings pesados)
+    const contextualPrompt = await this.buildContextualPrompt(
       message,
       analysis,
-      relevantMemories,
       conversationHistory,
       userContext
     );
     
-    // 6. Generar respuesta
-    const response = await this.generateChatGPTResponse(contextualPrompt, analysis);
+    // 5. Generar respuesta pasando el historial completo
+    const response = await this.generateChatGPTResponse(contextualPrompt, analysis, conversationHistory);
+
+    // 6. Cache para preguntas comunes
+    if (conversationHistory.length >= 3 && analysis.intent === 'question') {
+      responseCache.set(message, response);
+    }
     
-    // 7. Guardar respuesta en memoria
-    await this.memorySystem.storeMemory(response, 'conversation', 5);
-    
+    console.log(`⚡ Total: ${Date.now() - startTime}ms`);
     return response;
   }
 
-  private buildContextualPrompt(
+  private async buildContextualPrompt(
     message: string,
     analysis: IntentAnalysis,
-    memories: any[],
     history: any[],
     userContext: any
-  ): string {
+  ): Promise<string> {
     
-    // Determinar si es el primer mensaje de la conversación
     const isFirstMessage = history.length === 0;
     
-    const basePersonality = `Eres Julie, una asistente conversacional avanzada con estas características:
+    // Obtener contexto SOLO cuando sea relevante
+    let locationContext = '';
+    let newsContext = '';
+    
+    // Solo cargar ubicación/clima si la pregunta lo requiere
+    const needsLocation = /clima|temperatura|tiempo|lluv|sol|frío|calor|grados/i.test(message);
+    const needsNews = /noticia|noticias|pasando|pas[oó]|novedad/i.test(message);
+    
+    if (needsLocation || needsNews) {
+      try {
+        const promises = [];
+        if (needsLocation) promises.push(getLocationContext());
+        if (needsNews) promises.push(getNewsContext());
+        
+        const results = await Promise.all(promises);
+        if (needsLocation) locationContext = results[0] || '';
+        if (needsNews) newsContext = needsLocation ? results[1] || '' : results[0] || '';
+      } catch (error) {
+        console.warn('⚠️ Error contexto:', error);
+      }
+    }
+    
+    const basePersonality = `Eres Julie, asistente conversacional natural para adultos mayores.
 
-PERSONALIDAD CORE:
-- Empática y genuinamente interesada en el usuario
-- Memoria excepcional para detalles personales
-- Conversacional y natural, nunca robótica
-- Capaz de referenciarse a conversaciones pasadas
-- Emocionalmente inteligente y adaptativa
-- Tienes mucho conocimiento pero nunca aseguras las cosas que no puedes comprobar, por ejemplo: Situaciones medicas y sus diagnosticos
+PERSONALIDAD:
+- Amigable, paciente y comprensiva
+- Respuestas cortas y directas (máximo 2 frases)
+- Lenguaje simple y cotidiano
+- NO uses lenguaje técnico o robótico
+- Mantén el contexto de conversaciones anteriores
 
-ESTILO DE RESPUESTA:
-- Respuestas BREVES y CONCISAS (máximo 2-3 oraciones), cuando sea necesario puedes extenderte un poco más
-- NUNCA saludes si ya estás en medio de una conversación
-- Solo saluda en el PRIMER mensaje de la conversación
-- Ve directo al punto, evita introducciones innecesarias
-- No es necesario que repitas el nombre del usuario cada vez que respondas
-- Sé cálida pero eficiente
+USUARIO:
+${userContext.userName ? `Nombre: ${userContext.userName}` : 'Nombre desconocido'}
+${locationContext ? `\nCLIMA ACTUAL: ${locationContext}` : ''}
+${newsContext ? `\nNOTICIAS: ${newsContext}` : ''}
 
-INFORMACIÓN DEL USUARIO:
-${userContext.userName ? `- Se llama ${userContext.userName}` : '- Nombre no conocido aún'}
-${userContext.preferences && userContext.preferences.length > 0 ? `- Le gusta: ${userContext.preferences.join(', ')}` : ''}
+ANÁLISIS ACTUAL:
+Intención: ${analysis.intent}
+${analysis.medicationAction?.action ? `Medicamento: ${analysis.medicationAction.action}` : ''}
 
-ANÁLISIS DEL MENSAJE ACTUAL:
-- Intención: ${analysis.intent}
-- Sentimiento: ${analysis.sentiment}
-- Urgencia: ${analysis.urgency}
-- Categoría: ${analysis.topicCategory}
-${analysis.entities.emotions && analysis.entities.emotions.length > 0 ? `- Emociones detectadas: ${analysis.entities.emotions.join(', ')}` : ''}
-${analysis.medicationAction?.action ? `- Acción de medicamento detectada: ${analysis.medicationAction.action}` : ''}
-${analysis.entities.medications && analysis.entities.medications.length > 0 ? `- Medicamentos mencionados: ${analysis.entities.medications.join(', ')}` : ''}
-
-ESTADO DE LA CONVERSACIÓN:
-${isFirstMessage ? '- Este es el PRIMER mensaje, puedes saludar' : '- Conversación en curso, NO saludes, continúa naturalmente'}
-
-MEMORIAS RELEVANTES:
-${memories.map(m => `- ${m.content}`).join('\n')}
-
-CONVERSACIÓN RECIENTE:
-${history.slice(-3).map(h => `${h.role}: ${h.content}`).join('\n')}`;
+INSTRUCCIONES:
+- Usa el historial de mensajes para responder con contexto
+- Si hay información de clima/noticias, ÚSALA directamente
+- NO digas "voy a revisar" o "déjame ver"
+- Responde en máximo 2 frases cortas
+- Sé natural y conversacional`;
 
     return basePersonality;
   }
 
-  private async generateChatGPTResponse(prompt: string, analysis: IntentAnalysis): Promise<string> {
+  private async generateChatGPTResponse(
+    prompt: string, 
+    analysis: IntentAnalysis,
+    conversationHistory: any[] = []
+  ): Promise<string> {
     try {
-      // Para intenciones de medicamentos, generar respuestas predefinidas más rápidas
-      if (analysis.intent.startsWith('medication_')) {
+      // Respuestas rápidas para medicamentos (sin llamar a API)
+      if (analysis.intent.startsWith('medication_') && analysis.intent !== 'medication_query') {
         return this.generateMedicationResponse(analysis);
       }
 
+      // Construir mensajes con historial completo para mantener contexto
+      const messages: any[] = [
+        { role: 'system', content: prompt }
+      ];
+
+      // Tomar los últimos 6 mensajes pero asegurarnos de mantener pares user-assistant
+      let recentHistory = conversationHistory.slice(-6);
+      
+      // Si el historial empieza con assistant, quitarlo para mantener la secuencia correcta
+      if (recentHistory.length > 0 && recentHistory[0].role === 'assistant') {
+        recentHistory = recentHistory.slice(1);
+      }
+      
+      messages.push(...recentHistory);
+
+      // Log de depuración para verificar el historial
+      console.log('🔍 DEBUG - Mensajes enviados a OpenAI:');
+      console.log(`   Total de mensajes: ${messages.length}`);
+      console.log(`   Sistema: ${messages[0].role}`);
+      for (let i = 1; i < messages.length; i++) {
+        console.log(`   ${messages[i].role}: "${messages[i].content.substring(0, 50)}..."`);
+      }
+
+      // Configuración optimizada para respuestas rápidas
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -147,23 +184,29 @@ ${history.slice(-3).map(h => `${h.role}: ${h.content}`).join('\n')}`;
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-3.5-turbo', // Cambiado a 3.5-turbo para respuestas RÁPIDAS (1-2s vs 10-20s)
-          messages: [
-            { role: 'system', content: prompt },
-            { role: 'user', content: 'Responde de manera natural, conversacional y BREVE (máximo 2-3 oraciones).' }
-          ],
-          max_tokens: 80, // Reducido aún más para respuestas ultra rápidas
-          temperature: 0.8,
+          model: 'gpt-3.5-turbo',
+          messages: messages,
+          max_tokens: 80, // Reducido para respuestas más rápidas
+          temperature: 0.7, // Reducido para más consistencia
           presence_penalty: 0.3,
           frequency_penalty: 0.3
         }),
       });
 
+      if (!response.ok) {
+        throw new Error(`OpenAI error: ${response.status}`);
+      }
+
       const data = await response.json();
-      return data.choices[0].message.content;
-    } catch (error) {
-      console.error('Error generando respuesta:', error);
-      return 'Lo siento, tengo algunos problemas técnicos en este momento. ¿Podrías repetir eso?';
+      
+      if (!data.choices?.[0]?.message?.content) {
+        throw new Error('Invalid OpenAI response');
+      }
+      
+      return data.choices[0].message.content.trim();
+    } catch (error: any) {
+      console.error('❌ Error OpenAI:', error.message);
+      return 'Disculpa, tuve un problemita. ¿Me repites eso?';
     }
   }
 
@@ -174,22 +217,32 @@ ${history.slice(-3).map(h => `${h.role}: ${h.content}`).join('\n')}`;
     const action = analysis.medicationAction;
     const medName = action?.medicationName || 'tu medicamento';
 
+    // Variantes para hacer la conversación más natural
+    const confirmationVariants = [
+      `¡Excelente! Ya lo tengo anotado. ¿Todo bien con ${medName}?`,
+      `¡Perfecto! Ya está. ¿Te cayó bien hoy?`,
+      `¡Muy bien! Listo, ya quedó registrado. ¿Cómo te sientes?`,
+      `¡Genial! Ya lo marqué. ¿Alguna molestia o todo tranquilo?`,
+      `¡Listo! Ya está anotado. ¿Necesitas algo más?`
+    ];
+
     switch (analysis.intent) {
       case 'medication_taken':
-        return `¡Perfecto! He registrado que tomaste ${medName}. Tu tutor recibirá una notificación confirmando esto. ¿Cómo te sientes?`;
+        const randomResponse = confirmationVariants[Math.floor(Math.random() * confirmationVariants.length)];
+        return randomResponse;
       
       case 'medication_missed':
-        return `Entiendo que olvidaste tomar ${medName}. He notificado a tu tutor. ¿Quieres que te recuerde tomarlo ahora?`;
+        return `Entiendo que olvidaste tomar ${medName}. He notificado a tu tutor. ¿Te sientes bien?`;
       
       case 'medication_request':
-        // Esta solicitud será manejada por onMedicationAction que enviará POST /medication-requests
-        return `Entendido. He enviado una solicitud a tu tutor para agregar ${medName}${action?.dosage ? ` de ${action.dosage}` : ''} a tus medicamentos. Él revisará y aprobará tu solicitud pronto. ¿Hay algo más que quieras agregar sobre este medicamento?`;
+        return `Entendido. He enviado una solicitud a tu tutor para agregar ${medName}${action?.dosage ? ` de ${action.dosage}` : ''} a tus medicamentos registrados.`;
       
       case 'medication_query':
-        return `Claro, déjame revisar tus medicamentos registrados...`;
+        // Esta respuesta no debería usarse porque medication_query debe obtener datos reales
+        return `Voy a revisar tus medicamentos...`;
       
       case 'emergency':
-        return `¡HE ALERTADO A TU TUTOR INMEDIATAMENTE! Mantén la calma. ¿Qué está pasando? ¿Necesitas que llame a emergencias?`;
+        return `¡HE ALERTADO A TU TUTOR INMEDIATAMENTE! Mantén la calma. ¿Qué está pasando?`;
       
       default:
         return `Entendido. ¿Hay algo más en lo que pueda ayudarte?`;

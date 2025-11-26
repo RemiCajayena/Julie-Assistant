@@ -236,7 +236,13 @@ export function getMedicationById(medicationId) {
   return stmt.get(medicationId);
 }
 
-// Desactivar medicamento (no se elimina, solo se marca como inactivo)
+// Eliminar medicamento permanentemente de la base de datos
+export function deleteMedication(medicationId) {
+  const stmt = db.prepare('DELETE FROM medications WHERE id = ?');
+  return stmt.run(medicationId);
+}
+
+// Desactivar medicamento (mantener por compatibilidad, pero ya no se usa)
 export function deactivateMedication(medicationId) {
   const stmt = db.prepare('UPDATE medications SET active = 0 WHERE id = ?');
   return stmt.run(medicationId);
@@ -818,8 +824,8 @@ export function getUpcomingAppointments(userId) {
     SELECT * FROM appointments 
     WHERE user_id = ? 
     AND active = 1 
-    AND date(appointment_date) >= date('now')
-    AND date(appointment_date) <= date('now', '+7 days')
+    AND date(appointment_date) >= date('now', 'localtime')
+    AND date(appointment_date) <= date('now', 'localtime', '+7 days')
     ORDER BY appointment_date ASC, appointment_time ASC
   `);
 

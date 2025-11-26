@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "589706844371",
+    "project_id": "julie-assistant-ae224",
+    "storage_bucket": "julie-assistant-ae224.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:589706844371:android:43fe94b8fc521a119e5c26",
+        "android_client_info": {
+          "package_name": "com.julieassistant"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtpLBmB7u-kvaUvhV3s9UKp3l8_nAZV_w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

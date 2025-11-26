@@ -9,23 +9,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
-const API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+import { useServerUrl } from '../../config/api';
 
 export default function TutorRegistrationScreen() {
   const router = useRouter();
   const { setUserInfo } = useMode();
+  const { url, isLoading: isLoadingUrl, error: serverError } = useServerUrl();
   const [loading, setLoading] = useState(false);
 
   // Datos del tutor
@@ -78,18 +79,50 @@ export default function TutorRegistrationScreen() {
       return;
     }
 
+    console.log('🔄 Iniciando registro de tutor...');
     setLoading(true);
 
     try {
       // 1. Usar el userId por defecto
       const userId = 'usuario123';
+      console.log('📝 Guardando información del usuario:', userName);
       await setUserInfo(userId, userName.trim());
 
       // 2. Formatear teléfono con prefijo +56
       const formattedPhone = '+56' + tutorPhone.trim().replace(/\s/g, '');
+      console.log('📞 Teléfono formateado:', formattedPhone);
 
-      // 3. Registrar tutor en el servidor
-      const response = await fetch(`${API_URL}/tutor`, {
+      // Verificar si tenemos conexión con el servidor
+      if (isLoadingUrl) {
+        console.log('⚠️ Servidor aún cargando URL...');
+        setLoading(false);
+        Alert.alert('Espera', 'Conectando con el servidor...');
+        return;
+      }
+
+      if (serverError) {
+        console.log('❌ Error de servidor:', serverError);
+        setLoading(false);
+        Alert.alert('Error de Conexión', 'No se pudo conectar con el servidor. ¿Está el servidor ejecutándose?');
+        return;
+      }
+
+      console.log('📡 Enviando request al servidor:', url);
+      console.log('📦 Body:', JSON.stringify({
+        userId,
+        name: tutorName.trim(),
+        phone: formattedPhone,
+        relationship: relationship.trim() || 'Familiar',
+      }));
+
+      // 3. Registrar tutor en el servidor con timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.log('⏰ Request timeout después de 10 segundos');
+        controller.abort();
+      }, 10000);
+
+      const response = await fetch(`${url}/tutor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -98,26 +131,49 @@ export default function TutorRegistrationScreen() {
           phone: formattedPhone,
           relationship: relationship.trim() || 'Familiar',
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
+      console.log('📥 Respuesta del servidor:', response.status, response.ok);
 
       if (response.ok) {
         console.log('✅ Tutor registrado exitosamente');
 
-        // Registrar token de notificaciones push si está disponible
-        try {
-          // Intentar obtener el token de notificaciones desde AsyncStorage (lo guarda NotificationProvider)
-          const expoPushToken = await AsyncStorage.getItem('expoPushToken');
-          if (expoPushToken) {
-            // Importar dinámicamente para evitar ciclos
-            const { registerDeviceToken } = await import('../../utils/notificationService');
-            await registerDeviceToken(Number(userId), expoPushToken);
-            console.log('✅ Token de notificaciones registrado tras registro de tutor');
-          } else {
-            console.log('⚠️ No se encontró token de notificaciones para registrar tras registro de tutor');
-          }
-        } catch (err) {
-          console.error('Error registrando token de notificaciones tras registro de tutor:', err);
-        }
+        // Registrar token FCM de notificaciones push si está disponible (sin bloquear)
+        AsyncStorage.getItem('fcmToken')
+          .then(async (fcmToken) => {
+            if (fcmToken) {
+              console.log('📱 Token FCM encontrado, registrando en servidor...');
+              try {
+                const registerResponse = await fetch(`${url}/devices/register`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    userId,
+                    token: fcmToken,
+                    platform: Platform.OS,
+                    tokenType: 'fcm'
+                  }),
+                });
+                if (registerResponse.ok) {
+                  console.log('✅ Token FCM registrado correctamente tras registro de tutor');
+                } else {
+                  console.log('⚠️ No se pudo registrar el token FCM en el servidor');
+                }
+              } catch (err) {
+                console.error('Error registrando token FCM:', err);
+              }
+            }
+          })
+          .catch((err) => console.error('Error obteniendo token FCM:', err));
+
+        // Marcar que el tutor ya fue registrado ANTES del Alert
+        await AsyncStorage.setItem('tutorRegistered', 'true');
+        console.log('✅ Marcado tutorRegistered en AsyncStorage');
+
+        setLoading(false);
+        console.log('✅ Mostrando alert de éxito...');
 
         Alert.alert(
           '✅ Registro Completo',
@@ -126,8 +182,7 @@ export default function TutorRegistrationScreen() {
             {
               text: 'Continuar',
               onPress: () => {
-                // Marcar que el tutor ya fue registrado
-                AsyncStorage.setItem('tutorRegistered', 'true');
+                console.log('🚀 Navegando a /welcome...');
                 router.replace('/welcome');
               },
             },
@@ -135,17 +190,25 @@ export default function TutorRegistrationScreen() {
         );
       } else {
         const error = await response.text();
-        console.error('Error registrando tutor:', error);
+        console.error('❌ Error del servidor:', error);
+        setLoading(false);
         Alert.alert('Error', 'No se pudo registrar el tutor. Intenta nuevamente.');
       }
-    } catch (error) {
-      console.error('Error en registro:', error);
-      Alert.alert(
-        'Error de Conexión',
-        'No se pudo conectar con el servidor. Verifica que esté corriendo.'
-      );
-    } finally {
+    } catch (error: any) {
+      console.error('❌ Error en registro:', error);
       setLoading(false);
+      
+      if (error.name === 'AbortError') {
+        Alert.alert(
+          'Timeout',
+          'El servidor no respondió a tiempo. Verifica tu conexión e intenta nuevamente.'
+        );
+      } else {
+        Alert.alert(
+          'Error de Conexión',
+          'No se pudo conectar con el servidor. Verifica que esté corriendo.'
+        );
+      }
     }
   };
 
@@ -186,6 +249,20 @@ export default function TutorRegistrationScreen() {
           <Text style={styles.subtitle}>
             Registra la información del cuidador para recibir alertas y gestionar medicamentos
           </Text>
+          {isLoadingUrl && (
+            <View style={styles.connectionStatus}>
+              <ActivityIndicator size="small" color="#6366f1" />
+              <Text style={styles.connectionText}>Conectando con el servidor...</Text>
+            </View>
+          )}
+          {serverError && (
+            <View style={styles.connectionStatus}>
+              <Ionicons name="warning" size={20} color="#ef4444" />
+              <Text style={[styles.connectionText, { color: '#ef4444' }]}>
+                Error de conexión: {serverError}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Formulario */}
@@ -446,5 +523,19 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 14,
     fontWeight: '500',
+  },
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 8,
+  },
+  connectionText: {
+    fontSize: 14,
+    color: '#6b7280',
   },
 });

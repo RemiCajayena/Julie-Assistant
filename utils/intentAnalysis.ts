@@ -98,46 +98,43 @@ export class AdvancedIntentAnalyzer {
   private detectIntent(message: string): IntentAnalysis['intent'] {
     const lowerMessage = message.toLowerCase();
     
-    // Emergencia/SOS
-    if (/emergencia|ayuda urgente|socorro|sos|me caí|me duele mucho/i.test(message)) {
+    // Emergencia/SOS (más alta prioridad)
+    if (/emergencia|ayuda urgente|socorro|sos|me ca[ií]|me duele mucho|no puedo respirar/i.test(message)) {
       return 'emergency';
     }
     
     // Medicamentos - Tomado
-    if (/ya tom[eé]|acabo de tomar|tom[eé] (mi|la|el)/i.test(message)) {
+    if (/ya tom[eé]|acabo de tomar|tom[eé] (mi|la|el)|me (tom[eé]|la tom[eé])/i.test(message)) {
       return 'medication_taken';
     }
     
     // Medicamentos - Olvidado
-    if (/olvid[eé] tomar|no (tom[eé]|he tomado)|me salt[eé]/i.test(message)) {
+    if (/olvid[eé] tomar|no (tom[eé]|he tomado)|me salt[eé]|se me olvid[oó]/i.test(message)) {
       return 'medication_missed';
     }
     
-    // Medicamentos - Solicitar registro (requiere aprobación del tutor)
-    // Detecta frases como: "necesito agregar", "quiero registrar", "me recetaron", "agregar medicamento"
+    // Medicamentos - Consultar (prioritario antes de request)
+    if (/qu[eé] (medicamentos|pastillas|remedios)|cu[aá]les son mis|lista de medicamentos|mis medicamentos|tengo que tomar/i.test(message)) {
+      return 'medication_query';
+    }
+    
+    // Medicamentos - Solicitar registro
     if (
       /(?:necesito|quiero|debo|tengo que|puedo|podr[ií]as?|me gustaria)\s+(?:agregar|a[ñn]adir|registrar|ingresar|crear)/i.test(message) ||
       /(?:agregar|a[ñn]adir|registrar|ingresar|crear)\s+(?:un|una|el|la)?\s*(?:medicamento|pastilla|remedio|medicina)/i.test(message) ||
       /(?:nuevo|nueva)\s+(?:medicamento|pastilla|remedio|medicina)/i.test(message) ||
-      /me\s+(?:recetaron|dieron|indicaron|prescribieron)/i.test(message) ||
-      /(?:necesito|quiero|busco|dame|dime)\s+(?:información|info|datos)\s+(?:sobre|acerca\s+de|del?)\s+(?:el|la)?\s*\w+/i.test(message) ||
-      /(?:debo|tengo\s+que|voy\s+a|puedo)\s+(?:tomar|usar)\s+(?:el|la)?\s*\w+/i.test(message)
+      /me\s+(?:recetaron|dieron|indicaron|prescribieron)/i.test(message)
     ) {
       return 'medication_request';
     }
     
-    // Medicamentos - Consultar
-    if (/qu[eé] (medicamentos|pastillas|remedios)|cu[aá]les son mis|lista de medicamentos/i.test(message)) {
-      return 'medication_query';
-    }
-    
     // Saludos
-    if (/^(hola|hi|hey|buenos días|buenas tardes|buenas noches)/i.test(message)) {
+    if (/^(hola|hi|hey|buenos d[ií]as|buenas tardes|buenas noches|qu[eé] tal)/i.test(message)) {
       return 'greeting';
     }
     
-    // Preguntas
-    if (message.includes('?') || /^(qué|cómo|cuál|cuándo|dónde|por qué)/i.test(message)) {
+    // Preguntas (más amplio)
+    if (message.includes('?') || /^(qué|c[oó]mo|cu[aá]l|cu[aá]ndo|d[oó]nde|por qu[eé]|qui[eé]n|cu[aá]nto)/i.test(message)) {
       return 'question';
     }
     
@@ -301,8 +298,23 @@ export class AdvancedIntentAnalyzer {
   private detectMedicationAction(message: string, conversationHistory?: any[]): IntentAnalysis['medicationAction'] {
     const lowerMessage = message.toLowerCase();
     
-    // Detectar: "Ya tomé mi aspirina" / "Tomé la pastilla"
-    if (/ya tom[eé]|acabo de tomar|tom[eé] (mi|la|el)/i.test(message)) {
+    // AMPLIADO: Detectar confirmación de toma (más patrones)
+    const takenPatterns = [
+      /ya tom[eé]/i,
+      /acabo de tomar/i,
+      /tom[eé] (mi|la|el|mis|las|los)/i,
+      /me tom[eé]/i,
+      /lo tom[eé]/i,
+      /la tom[eé]/i,
+      /s[ií],?\s*(ya\s*)?tom[eé]/i,
+      /s[ií],?\s*lo\s*tom[eé]/i,
+      /listo,?\s*tom[eé]/i,
+      /tom[eé]\s*(la|el|mi)\s*(pastilla|medicina|medicamento)/i,
+      /ingier[oó]\s*(la|el|mi)/i,
+      /consum[ií]\s*(la|el|mi)/i
+    ];
+    
+    if (takenPatterns.some(pattern => pattern.test(message))) {
       return {
         action: 'taken',
         medicationName: this.extractMedicationName(message, conversationHistory),
@@ -311,7 +323,7 @@ export class AdvancedIntentAnalyzer {
     }
     
     // Detectar: "Olvidé tomar" / "No tomé"
-    if (/olvid[eé] tomar|no (tom[eé]|he tomado)|me salt[eé]/i.test(message)) {
+    if (/olvid[eé] tomar|no (tom[eé]|he tomado)|me salt[eé]|no\s*lo\s*tom[eé]/i.test(message)) {
       return {
         action: 'missed',
         medicationName: this.extractMedicationName(message, conversationHistory),

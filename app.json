@@ -8,9 +8,9 @@
     "scheme": "julie-assistant",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/splash.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#4CAF50"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -20,11 +20,13 @@
       "bundleIdentifier": "com.julieassistant",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Julie necesita acceso al micrófono para escucharte.",
-        "NSUserNotificationsUsageDescription": "Julie necesita enviar notificaciones para recordarte tomar tus medicamentos."
+        "NSUserNotificationsUsageDescription": "Julie necesita enviar notificaciones para recordarte tomar tus medicamentos.",
+        "NSLocationWhenInUseUsageDescription": "Julie necesita tu ubicación para brindarte información del clima y noticias locales."
       }
     },
     "android": {
       "package": "com.julieassistant",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -35,7 +37,9 @@
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.VIBRATE",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -48,18 +52,29 @@
       "./plugins/withAndroidManifestFix.js",
       "expo-secure-store",
       [
+        "expo-av",
+        {
+          "microphonePermission": "Julie necesita acceso al micrófono para escucharte y poder ayudarte."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#6366f1",
-          "sounds": [
-            "./assets/sounds/notification.wav"
-          ]
+          "color": "#6366f1"
         }
-      ]
+      ],
+      "@react-native-firebase/app"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a82ce66b-070b-4448-8652-5788d223b66c"
+      }
+    },
+    "owner": "remicajayena"
   }
 }

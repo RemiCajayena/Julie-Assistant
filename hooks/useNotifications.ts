@@ -38,25 +38,22 @@ export function useNotifications() {
     registerForPushNotificationsAsync().then(token => {
       if (token) {
         setExpoPushToken(token);
-        console.log('📱 Push token obtenido:', token);
       }
     });
 
     // Listener para notificaciones recibidas mientras la app está abierta
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('🔔 Notificación recibida:', notification);
       setNotification(notification);
     });
 
     // Listener para cuando el usuario toca una notificación
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('👆 Notificación tocada:', response);
       const data = response.notification.request.content.data as unknown as NotificationData;
       
       // Aquí puedes navegar a la pantalla correspondiente
       if (data.type === 'medication_reminder' && data.medicationId) {
         // Navegar a medicamentos
-        console.log('Navegar a medicamento:', data.medicationId);
+        console.log('📱 Notificación de medicamento:', data.medicationId);
       }
     });
 
@@ -226,21 +223,21 @@ async function registerForPushNotificationsAsync() {
   }
   
   try {
-    // En desarrollo/Expo Go, usar un token simulado
-    // En producción con build nativo, usar el token real de Expo
+    // Obtener el token de Expo Push
     try {
+      // Para dispositivos físicos con build de desarrollo, necesitamos el projectId correcto
       token = (await Notifications.getExpoPushTokenAsync({
-        projectId: 'julie-assistant', // Corresponde al slug en app.json
+        projectId: '71804a7c-79a5-49f6-a1c9-07889cf4c0a3', // Tu EAS Project ID
       })).data;
       
-      console.log('✅ Token de notificaciones obtenido');
-    } catch (pushError) {
-      // Si falla (ej: Expo Go sin Firebase), usar un token de desarrollo
-      console.log('⚠️ No se pudo obtener token push, usando modo local');
+      console.log('✅ Notificaciones configuradas');
+    } catch (pushError: any) {
+      // Si falla (build sin configuración de push), usar token de desarrollo
+      console.log('⚠️ Usando notificaciones locales');
       token = 'development-mode-token';
     }
   } catch (error) {
-    console.error('Error en permisos de notificaciones:', error);
+    console.error('❌ Error en permisos de notificaciones:', error);
   }
 
   return token;

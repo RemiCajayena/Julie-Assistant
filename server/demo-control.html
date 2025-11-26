@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 Panel de Control - Demo Julie Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus,
+        .input-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #dd6b20;
+            transform: translateY(-2px);
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #48bb78;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #f56565;
+        }
+
+        .medications-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .medication-item {
+            background: #f7fafc;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .medication-item h4 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .medication-item p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online {
+            background: #48bb78;
+        }
+
+        .status-offline {
+            background: #f56565;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .info-box {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .info-box strong {
+            display: block;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .info-box code {
+            background: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #667eea;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 Panel de Control - Demo Julie Assistant</h1>
+            <p>Controla la demostración en tiempo real</p>
+        </div>
+
+        <div class="grid">
+            <!-- Forzar Recordatorio -->
+            <div class="card">
+                <h2>💊 Forzar Recordatorio</h2>
+                <div class="info-box">
+                    <strong>Servidor:</strong>
+                    <code id="serverUrl">http://localhost:3000</code>
+                    <span class="status-indicator status-offline" id="statusIndicator"></span>
+                </div>
+                
+                <div class="input-group">
+                    <label>ID del Adulto Mayor:</label>
+                    <input type="text" id="userId" value="elder_demo_001" placeholder="Ej: elder_demo_001">
+                </div>
+
+                <div class="input-group">
+                    <label>Seleccionar Medicamento:</label>
+                    <select id="medicationSelect">
+                        <option value="">Cargar medicamentos...</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-success" onclick="loadMedications()">
+                    🔄 Cargar Medicamentos
+                </button>
+
+                <button class="btn btn-primary" onclick="triggerReminder()">
+                    📢 Enviar Recordatorio Ahora
+                </button>
+
+                <div class="alert" id="reminderAlert"></div>
+            </div>
+
+            <!-- Medicamentos Programados -->
+            <div class="card">
+                <h2>📋 Medicamentos del Día</h2>
+                <button class="btn btn-warning" onclick="createDemoData()">
+                    🧪 Crear Datos de Prueba
+                </button>
+                <div class="medications-list" id="medicationsList">
+                    <p style="color: #666; text-align: center; padding: 20px;">
+                        Carga los medicamentos para verlos aquí
+                    </p>
+                </div>
+            </div>
+
+            <!-- Estado del Sistema -->
+            <div class="card">
+                <h2>⚙️ Estado del Sistema</h2>
+                <div class="info-box">
+                    <strong>Servidor Backend:</strong>
+                    <span id="serverStatus">Verificando...</span>
+                </div>
+                <div class="info-box">
+                    <strong>Emulador Android:</strong>
+                    <span id="emulatorStatus">-</span>
+                </div>
+                <div class="info-box">
+                    <strong>Dispositivo Físico:</strong>
+                    <span id="deviceStatus">-</span>
+                </div>
+                <button class="btn btn-primary" onclick="checkStatus()">
+                    🔍 Verificar Estado
+                </button>
+            </div>
+
+            <!-- Guía Rápida -->
+            <div class="card">
+                <h2>📖 Guía Rápida</h2>
+                <div class="info-box">
+                    <strong>1. Crear Datos de Prueba</strong>
+                    <p>Clic en "Crear Datos de Prueba" para poblar la BD</p>
+                </div>
+                <div class="info-box">
+                    <strong>2. Cargar Medicamentos</strong>
+                    <p>Usa el ID del adulto mayor para cargar sus medicamentos</p>
+                </div>
+                <div class="info-box">
+                    <strong>3. Forzar Recordatorio</strong>
+                    <p>Selecciona un medicamento y envía el recordatorio</p>
+                </div>
+                <div class="info-box">
+                    <strong>4. Observar Dispositivos</strong>
+                    <p>Verás la notificación en el dispositivo del adulto mayor</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://192.168.1.207:3000'; // IP local del servidor
+
+        // Actualizar URL en pantalla
+        document.getElementById('serverUrl').textContent = API_URL;
+
+        // Verificar estado al cargar
+        checkStatus();
+
+        async function checkStatus() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                if (response.ok) {
+                    document.getElementById('serverStatus').textContent = '✅ Online';
+                    document.getElementById('serverStatus').style.color = '#48bb78';
+                    document.getElementById('statusIndicator').className = 'status-indicator status-online';
+                } else {
+                    throw new Error('Server error');
+                }
+            } catch (error) {
+                document.getElementById('serverStatus').textContent = '❌ Offline';
+                document.getElementById('serverStatus').style.color = '#f56565';
+                document.getElementById('statusIndicator').className = 'status-indicator status-offline';
+            }
+        }
+
+        async function loadMedications() {
+            const userId = document.getElementById('userId').value;
+            if (!userId) {
+                showAlert('reminderAlert', 'Por favor ingresa un ID de usuario', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/demo/medications/${userId}`);
+                const data = await response.json();
+
+                if (data.medications && data.medications.length > 0) {
+                    // Llenar el select
+                    const select = document.getElementById('medicationSelect');
+                    select.innerHTML = '<option value="">Selecciona un medicamento...</option>';
+                    
+                    data.medications.forEach(med => {
+                        const option = document.createElement('option');
+                        option.value = med.name;
+                        option.textContent = `${med.name} ${med.dosage} - ${med.time}`;
+                        select.appendChild(option);
+                    });
+
+                    // Mostrar lista
+                    const list = document.getElementById('medicationsList');
+                    list.innerHTML = '';
+                    data.medications.forEach(med => {
+                        const item = document.createElement('div');
+                        item.className = 'medication-item';
+                        item.innerHTML = `
+                            <h4>${med.name} ${med.dosage}</h4>
+                            <p>🕐 ${med.time} | ${med.purpose || 'Sin propósito especificado'}</p>
+                        `;
+                        list.appendChild(item);
+                    });
+
+                    showAlert('reminderAlert', `✅ ${data.medications.length} medicamentos cargados`, 'success');
+                } else {
+                    showAlert('reminderAlert', 'No se encontraron medicamentos para este usuario', 'error');
+                }
+            } catch (error) {
+                showAlert('reminderAlert', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function triggerReminder() {
+            const userId = document.getElementById('userId').value;
+            const medicationName = document.getElementById('medicationSelect').value;
+
+            if (!userId) {
+                showAlert('reminderAlert', 'Por favor ingresa un ID de usuario', 'error');
+                return;
+            }
+
+            if (!medicationName) {
+                showAlert('reminderAlert', 'Por favor selecciona un medicamento', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/demo/trigger-reminder`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        medicationName
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showAlert('reminderAlert', 
+                        `✅ Recordatorio enviado: ${data.medication.name} ${data.medication.dosage}`,
+                        'success'
+                    );
+                } else {
+                    showAlert('reminderAlert', `Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert('reminderAlert', `Error de conexión: ${error.message}`, 'error');
+            }
+        }
+
+        async function createDemoData() {
+            if (confirm('¿Estás seguro de crear los datos de prueba? Esto sobrescribirá datos existentes.')) {
+                showAlert('reminderAlert', '⏳ Creando datos de prueba...', 'success');
+                
+                // Instrucciones para el usuario
+                setTimeout(() => {
+                    showAlert('reminderAlert', 
+                        'Ejecuta en terminal: cd server && node createDemoData.js',
+                        'error'
+                    );
+                }, 1000);
+            }
+        }
+
+        function showAlert(elementId, message, type) {
+            const alert = document.getElementById(elementId);
+            alert.className = `alert alert-${type} show`;
+            alert.textContent = message;
+
+            setTimeout(() => {
+                alert.className = 'alert';
+            }, 5000);
+        }
+
+        // Verificar estado cada 30 segundos
+        setInterval(checkStatus, 30000);
+    </script>
+</body>
+</html>
